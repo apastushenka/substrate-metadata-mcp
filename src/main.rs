@@ -1,26 +1,41 @@
-use rmcp::{
-    ServerHandler, ServiceExt,
-    model::{Implementation, ServerCapabilities, ServerInfo},
-    transport::stdio,
-};
+mod cli;
+mod metadata;
+mod server;
 
-#[derive(Clone, Default)]
-struct MetadataServer;
+use std::process::ExitCode;
 
-impl ServerHandler for MetadataServer {
-    fn get_info(&self) -> ServerInfo {
-        ServerInfo::new(ServerCapabilities::default())
-            .with_server_info(Implementation::new(
-                env!("CARGO_PKG_NAME"),
-                env!("CARGO_PKG_VERSION"),
-            ))
-            .with_instructions("Substrate metadata MCP server")
+use rmcp::{ServiceExt, transport::stdio};
+
+use crate::server::MetadataServer;
+
+#[tokio::main]
+async fn main() -> ExitCode {
+    match run().await {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(err) => {
+            eprintln!("{}: {err:#}", env!("CARGO_PKG_NAME"));
+            ExitCode::FAILURE
+        }
     }
 }
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let service = MetadataServer.serve(stdio()).await?;
+async fn run() -> anyhow::Result<()> {
+    let cli = cli::parse();
+    let server = MetadataServer::new(cli.url);
+
+    // Preload metadata
+    tokio::spawn({
+        let server = server.clone();
+
+        async move {
+            if let Err(err) = server.metadata().await {
+                eprintln!("{}: {err:#}", env!("CARGO_PKG_NAME"));
+            }
+        }
+    });
+
+    let service = server.serve(stdio()).await?;
     service.waiting().await?;
+
     Ok(())
 }
