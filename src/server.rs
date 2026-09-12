@@ -4,13 +4,14 @@ use std::sync::Arc;
 
 use rmcp::{
     Json, ServerHandler,
+    handler::server::wrapper::Parameters,
     model::{Implementation, ServerCapabilities, ServerInfo},
     tool, tool_handler, tool_router,
 };
 use subxt_utils_fetchmetadata::Url;
 use tokio::sync::OnceCell;
 
-use crate::metadata::{self, LoadedMetadata, RuntimeInfo};
+use crate::metadata::{self, LoadedMetadata, RuntimeInfo, SearchRequest, SearchResults};
 
 #[derive(Clone)]
 pub struct MetadataServer {
@@ -50,6 +51,23 @@ impl MetadataServer {
         let loaded = self.metadata().await.map_err(tool_error)?;
 
         metadata::runtime_info(loaded).map(Json).map_err(tool_error)
+    }
+
+    /// Find pallets, runtime APIs, calls, runtime API methods, view functions, storage
+    /// entries, constants, events and errors whose name or documentation matches a query.
+    /// The runtime's metadata is far too large to read whole; this is how you locate
+    /// something in it. Results are ranked and truncated -- check `total` before assuming
+    /// you have all of them.
+    #[tool]
+    async fn search(
+        &self,
+        Parameters(request): Parameters<SearchRequest>,
+    ) -> Result<Json<SearchResults>, String> {
+        let loaded = self.metadata().await.map_err(tool_error)?;
+
+        metadata::search(loaded, &request)
+            .map(Json)
+            .map_err(tool_error)
     }
 }
 

@@ -1,13 +1,17 @@
 //! Fetching and decoding runtime metadata, and reading facts out of it.
 
 mod runtime;
+mod search;
 
 use anyhow::Context;
 use frame_metadata::{META_RESERVED, RuntimeMetadataPrefixed};
 use subxt_metadata::{Metadata, decode_runtime_metadata};
 use subxt_utils_fetchmetadata::{MetadataVersion, Url, from_url};
 
-pub use self::runtime::{RuntimeInfo, runtime_info};
+pub use self::{
+    runtime::{RuntimeInfo, runtime_info},
+    search::{SearchRequest, SearchResults, search},
+};
 
 /// `Metadata` does not keep the version of the format it was decoded from, so [`load`]
 /// records it alongside.
