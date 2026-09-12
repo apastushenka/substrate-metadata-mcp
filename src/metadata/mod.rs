@@ -1,6 +1,7 @@
 //! Fetching and decoding runtime metadata, and reading facts out of it.
 
 mod item;
+mod namespaces;
 mod runtime;
 mod search;
 
@@ -10,6 +11,7 @@ use subxt_metadata::{Metadata, decode_runtime_metadata};
 use subxt_utils_fetchmetadata::{MetadataVersion, Url, from_url};
 
 pub use self::{
+    namespaces::{NamespaceList, namespaces},
     runtime::{RuntimeInfo, runtime_info},
     search::{SearchRequest, SearchResults, search},
 };

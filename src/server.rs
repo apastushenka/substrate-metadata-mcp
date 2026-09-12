@@ -11,7 +11,9 @@ use rmcp::{
 use subxt_utils_fetchmetadata::Url;
 use tokio::sync::OnceCell;
 
-use crate::metadata::{self, LoadedMetadata, RuntimeInfo, SearchRequest, SearchResults};
+use crate::metadata::{
+    self, LoadedMetadata, NamespaceList, RuntimeInfo, SearchRequest, SearchResults,
+};
 
 #[derive(Clone)]
 pub struct MetadataServer {
@@ -51,6 +53,17 @@ impl MetadataServer {
         let loaded = self.metadata().await.map_err(tool_error)?;
 
         metadata::runtime_info(loaded).map(Json).map_err(tool_error)
+    }
+
+    /// List the runtime's pallets and runtime API traits -- the map to read first. Each
+    /// entry's `kind` says which of the two it is, and so which tool lists its members:
+    /// `pallet_members` takes a pallet's `name` as `pallet`, `runtime_api_methods` takes
+    /// a trait's `name` as `runtime_api`.
+    #[tool]
+    async fn namespaces(&self) -> Result<Json<NamespaceList>, String> {
+        let loaded = self.metadata().await.map_err(tool_error)?;
+
+        Ok(Json(metadata::namespaces(loaded)))
     }
 
     /// Find pallets, runtime APIs, calls, runtime API methods, view functions, storage
