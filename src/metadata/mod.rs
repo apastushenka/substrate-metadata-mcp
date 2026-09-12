@@ -1,5 +1,6 @@
 //! Fetching and decoding runtime metadata, and reading facts out of it.
 
+mod item;
 mod runtime;
 mod search;
 

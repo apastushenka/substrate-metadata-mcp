@@ -11,32 +11,12 @@ use core::cmp::Ordering;
 use anyhow::ensure;
 use rmcp::schemars::{self, JsonSchema};
 use serde::{Deserialize, Serialize};
-use subxt_metadata::Metadata;
 
 use self::tokens::tokenize;
-use super::LoadedMetadata;
-
-/// A pallet, a runtime API trait, or an item inside one of them.
-///
-/// `runtime_api` is a trait of host-callable runtime methods; `runtime_api_method` is
-/// one method of that trait; `view_function` is a read-only query on a pallet.
-// `Ord` is derived from declaration order and `search` sorts by it, so reordering
-// the variants reorders equally relevant `hits`.
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema,
-)]
-#[serde(rename_all = "snake_case")]
-pub enum ItemKind {
-    Pallet,
-    RuntimeApi,
-    Call,
-    RuntimeApiMethod,
-    ViewFunction,
-    Storage,
-    Constant,
-    Event,
-    Error,
-}
+use super::{
+    LoadedMetadata,
+    item::{Item, ItemKind, ItemRef, for_each_item},
+};
 
 /// `name`: at least one query word hit the item's own name. `docs`: none did; the
 /// words were found in its documentation.
@@ -89,36 +69,10 @@ pub struct SearchResults {
 /// One item of the metadata, addressed by `kind`, `namespace` and `name`.
 #[derive(Debug, Serialize, JsonSchema)]
 pub struct SearchHit {
-    /// What the item is. It also fixes what `namespace` is: a runtime API trait for
-    /// `runtime_api_method`, a pallet for every other kind that has one.
-    pub kind: ItemKind,
-    /// The pallet or runtime API trait the item belongs to -- which of the two is given
-    /// by `kind`. Absent for a pallet or a trait itself.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[schemars(extend("type" = "string"))]
-    pub namespace: Option<String>,
-    /// The item's own name, exactly as in the metadata -- without the pallet or
-    /// trait it sits in. Pass it on verbatim; do not normalise case.
-    pub name: String,
-    /// First line of the item's own documentation, truncated. Absent when the item has
-    /// no documentation of its own.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[schemars(extend("type" = "string"))]
-    pub summary: Option<String>,
+    #[serde(flatten)]
+    pub item: Item,
     /// A `docs` hit is a lead to check, not the answer.
     pub matched_in: MatchedIn,
-}
-
-impl SearchHit {
-    fn new(item: &Item<'_>, matched_in: MatchedIn) -> Self {
-        Self {
-            kind: item.kind,
-            namespace: item.namespace.map(String::from),
-            name: String::from(item.name),
-            summary: summary(item.docs),
-            matched_in,
-        }
-    }
 }
 
 const DEFAULT_LIMIT: usize = 20;
@@ -144,15 +98,23 @@ pub fn search(loaded: &LoadedMetadata, request: &SearchRequest) -> anyhow::Resul
             return;
         };
 
-        scored.push((rank, SearchHit::new(&item, rank.matched_in)));
+        scored.push((
+            rank,
+            SearchHit {
+                item: Item::new(&item),
+                matched_in: rank.matched_in,
+            },
+        ));
     });
 
     scored.sort_by(|(rank_a, hit_a), (rank_b, hit_b)| {
-        rank_a.cmp_rank(rank_b)
+        let a = &hit_a.item;
+        let b = &hit_b.item;
+
+        rank_a
+            .cmp_rank(rank_b)
             // Everything below is only here to make the order reproducible.
-            .then_with(|| hit_a.kind.cmp(&hit_b.kind))
-            .then_with(|| hit_a.namespace.cmp(&hit_b.namespace))
-            .then_with(|| hit_a.name.cmp(&hit_b.name))
+            .then_with(|| (a.kind, &a.namespace, &a.name).cmp(&(b.kind, &b.namespace, &b.name)))
     });
 
     let total = scored.len();
@@ -168,106 +130,6 @@ pub fn search(loaded: &LoadedMetadata, request: &SearchRequest) -> anyhow::Resul
         hits,
         unmatched: scanner.unmatched(),
     })
-}
-
-struct Item<'a> {
-    kind: ItemKind,
-    namespace: Option<&'a str>,
-    name: &'a str,
-    docs: &'a [String],
-}
-
-/// Adding an `ItemKind` means adding a loop here and touching nothing else: no code
-/// downstream has a case per kind. A kind the metadata version predates simply yields
-/// nothing -- view functions before v16, runtime APIs before v15 -- so nothing checks the
-/// version.
-fn for_each_item(metadata: &Metadata, mut visit: impl FnMut(Item<'_>)) {
-    for pallet in metadata.pallets() {
-        let namespace = pallet.name();
-
-        visit(Item {
-            kind: ItemKind::Pallet,
-            namespace: None,
-            name: namespace,
-            docs: pallet.docs(),
-        });
-
-        for variant in pallet.call_variants().unwrap_or_default() {
-            visit(Item {
-                kind: ItemKind::Call,
-                namespace: Some(namespace),
-                name: &variant.name,
-                docs: &variant.docs,
-            });
-        }
-
-        for variant in pallet.event_variants().unwrap_or_default() {
-            visit(Item {
-                kind: ItemKind::Event,
-                namespace: Some(namespace),
-                name: &variant.name,
-                docs: &variant.docs,
-            });
-        }
-
-        for variant in pallet.error_variants().unwrap_or_default() {
-            visit(Item {
-                kind: ItemKind::Error,
-                namespace: Some(namespace),
-                name: &variant.name,
-                docs: &variant.docs,
-            });
-        }
-
-        let entries = pallet.storage().map(|storage| storage.entries());
-
-        for entry in entries.unwrap_or_default() {
-            visit(Item {
-                kind: ItemKind::Storage,
-                namespace: Some(namespace),
-                name: entry.name(),
-                docs: entry.docs(),
-            });
-        }
-
-        for constant in pallet.constants() {
-            visit(Item {
-                kind: ItemKind::Constant,
-                namespace: Some(namespace),
-                name: constant.name(),
-                docs: constant.docs(),
-            });
-        }
-
-        for view_function in pallet.view_functions() {
-            visit(Item {
-                kind: ItemKind::ViewFunction,
-                namespace: Some(namespace),
-                name: view_function.name(),
-                docs: view_function.docs(),
-            });
-        }
-    }
-
-    for api in metadata.runtime_api_traits() {
-        let namespace = api.name();
-
-        visit(Item {
-            kind: ItemKind::RuntimeApi,
-            namespace: None,
-            name: namespace,
-            docs: api.docs(),
-        });
-
-        for method in api.methods() {
-            visit(Item {
-                kind: ItemKind::RuntimeApiMethod,
-                namespace: Some(namespace),
-                name: method.name(),
-                docs: method.docs(),
-            });
-        }
-    }
 }
 
 /// A set of terms is a `u64` mask, bit `i` for term `i`.
@@ -299,7 +161,7 @@ impl<'a> Scanner<'a> {
         Ok(Self { terms, seen: 0 })
     }
 
-    fn scan(&mut self, item: &Item<'_>) -> TermHits {
+    fn scan(&mut self, item: &ItemRef<'_>) -> TermHits {
         let (mut name, mut docs, mut namespace) = (0u64, 0u64, 0u64);
 
         let mut coverage = NameCoverage::default();
@@ -433,20 +295,6 @@ impl Rank {
     }
 }
 
-const SUMMARY_CHARS: usize = 200;
-
-fn summary(docs: &[String]) -> Option<String> {
-    let line = docs
-        .iter()
-        .map(|line| line.trim())
-        .find(|line| !line.is_empty())?;
-
-    match line.char_indices().nth(SUMMARY_CHARS) {
-        Some((end, _)) => Some(format!("{}...", &line[..end])),
-        None => Some(String::from(line)),
-    }
-}
-
 mod tokens {
     /// Word breaks, not substrings: `all` does not hit `allow` in
     /// `transfer_allow_death`, and a fragment of a pallet name does not select
@@ -556,7 +404,7 @@ mod tests {
     fn rank(name: &str, namespace: Option<&str>, docs: &[&str], query: &str) -> Option<Rank> {
         let docs: Vec<String> = docs.iter().copied().map(String::from).collect();
 
-        let item = Item {
+        let item = ItemRef {
             kind: ItemKind::Call,
             namespace,
             name,
@@ -625,7 +473,7 @@ mod tests {
     fn container_matches_on_its_own_name() {
         let docs: Vec<String> = Vec::new();
 
-        let item = Item {
+        let item = ItemRef {
             kind: ItemKind::Pallet,
             namespace: None,
             name: "Balances",
@@ -659,7 +507,7 @@ mod tests {
     #[test]
     fn unmatched_lists_terms_that_hit_nothing() {
         let docs: Vec<String> = Vec::new();
-        let item = Item {
+        let item = ItemRef {
             kind: ItemKind::Call,
             namespace: Some("Balances"),
             name: "transfer_all",
@@ -670,38 +518,5 @@ mod tests {
         scanner.scan(&item);
 
         assert_eq!(scanner.unmatched(), ["nonsense"]);
-    }
-
-    #[test]
-    fn summary_skips_blank_lines_and_trims() {
-        let docs = ["", "  ", "  Transfer funds.  "].map(String::from);
-
-        assert_eq!(summary(&docs).as_deref(), Some("Transfer funds."));
-    }
-
-    #[test]
-    fn summary_is_absent_without_text() {
-        assert_eq!(summary(&[]), None);
-        assert_eq!(summary(&["  ".into(), "\t".into()]), None);
-    }
-
-    #[test]
-    fn summary_keeps_line_at_limit_whole() {
-        let line = "a".repeat(SUMMARY_CHARS);
-
-        assert_eq!(
-            summary(core::slice::from_ref(&line)).as_deref(),
-            Some(line.as_str())
-        );
-    }
-
-    #[test]
-    fn summary_truncates_past_limit() {
-        let line = "я".repeat(SUMMARY_CHARS + 1);
-
-        assert_eq!(
-            summary(core::slice::from_ref(&line)),
-            Some(format!("{}...", "я".repeat(SUMMARY_CHARS)))
-        );
     }
 }
