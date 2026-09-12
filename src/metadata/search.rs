@@ -9,7 +9,7 @@
 use core::cmp::Ordering;
 
 use anyhow::ensure;
-use schemars::JsonSchema;
+use rmcp::schemars::{self, JsonSchema};
 use serde::{Deserialize, Serialize};
 use subxt_metadata::Metadata;
 

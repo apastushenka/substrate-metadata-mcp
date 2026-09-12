@@ -2,8 +2,8 @@
 
 use anyhow::Context;
 use frame_decode::constants::decode_constant;
+use rmcp::schemars::{self, JsonSchema};
 use scale_decode::{DecodeAsType, IntoVisitor};
-use schemars::JsonSchema;
 use serde::Serialize;
 use subxt_metadata::Metadata;
 
