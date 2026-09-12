@@ -92,3 +92,160 @@ impl ServerHandler for MetadataServer {
 fn tool_error(err: anyhow::Error) -> String {
     format!("{err:#}")
 }
+
+#[cfg(test)]
+mod tests {
+    use rmcp::serde_json::{Map, Value};
+
+    use super::MetadataServer;
+
+    fn for_each_schema(mut visit: impl FnMut(&str, &Map<String, Value>)) {
+        for tool in MetadataServer::tool_router().list_all() {
+            visit(&format!("{}.input", tool.name), &tool.input_schema);
+
+            let Some(output) = tool.output_schema.as_deref() else {
+                continue;
+            };
+
+            visit(&format!("{}.output", tool.name), output);
+        }
+    }
+
+    fn for_each_subschema(
+        schema: &Map<String, Value>,
+        path: &str,
+        visit: &mut impl FnMut(&str, &Map<String, Value>),
+    ) {
+        visit(path, schema);
+
+        for key in ["properties", "patternProperties", "$defs", "definitions"] {
+            let Some(members) = schema.get(key).and_then(Value::as_object) else {
+                continue;
+            };
+
+            for (name, child) in members {
+                let Some(child) = child.as_object() else {
+                    continue;
+                };
+
+                for_each_subschema(child, &format!("{path}/{key}/{name}"), visit);
+            }
+        }
+
+        for key in ["items", "additionalProperties", "not", "if", "then", "else"] {
+            match schema.get(key) {
+                Some(Value::Object(child)) => {
+                    for_each_subschema(child, &format!("{path}/{key}"), visit);
+                }
+                Some(Value::Array(children)) => {
+                    for (i, child) in children.iter().enumerate() {
+                        let Some(child) = child.as_object() else {
+                            continue;
+                        };
+
+                        for_each_subschema(child, &format!("{path}/{key}/{i}"), visit);
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        for key in ["prefixItems", "anyOf", "oneOf", "allOf"] {
+            let Some(children) = schema.get(key).and_then(Value::as_array) else {
+                continue;
+            };
+
+            for (i, child) in children.iter().enumerate() {
+                let Some(child) = child.as_object() else {
+                    continue;
+                };
+
+                for_each_subschema(child, &format!("{path}/{key}/{i}"), visit);
+            }
+        }
+    }
+
+    fn assert_members_have_descriptions(schema: &Map<String, Value>, path: &str, key: &str) {
+        let Some(members) = schema.get(key).and_then(Value::as_object) else {
+            return;
+        };
+
+        for (name, member) in members {
+            let description = member
+                .as_object()
+                .and_then(|member| member.get("description"))
+                .and_then(Value::as_str);
+
+            assert!(
+                description.is_some_and(|text| !text.is_empty()),
+                "{path}/{key}/{name}: missing description"
+            );
+        }
+    }
+
+    #[test]
+    fn tools_have_output_schema() {
+        for tool in MetadataServer::tool_router().list_all() {
+            assert!(
+                tool.output_schema.is_some(),
+                "{}: no output_schema",
+                tool.name
+            );
+        }
+    }
+
+    #[test]
+    fn option_fields_have_single_type() {
+        for_each_schema(|path, schema| {
+            for_each_subschema(schema, path, &mut |path, schema| {
+                if schema.get("type").is_some_and(Value::is_array) {
+                    panic!("{path}: type is a union, must be a single word");
+                }
+            });
+        });
+    }
+
+    #[test]
+    fn schemas_have_no_null() {
+        for_each_schema(|path, schema| {
+            for_each_subschema(schema, path, &mut |path, schema| {
+                assert_ne!(
+                    schema.get("type").and_then(Value::as_str),
+                    Some("null"),
+                    "{path}: type is null"
+                );
+
+                if let Some(Value::Array(variants)) = schema.get("enum") {
+                    assert!(
+                        variants.iter().all(|variant| !variant.is_null()),
+                        "{path}: enum contains null"
+                    );
+                }
+
+                assert!(
+                    !schema.get("const").is_some_and(Value::is_null),
+                    "{path}: const is null"
+                );
+            });
+        });
+    }
+
+    #[test]
+    fn properties_have_descriptions() {
+        for_each_schema(|path, schema| {
+            for_each_subschema(schema, path, &mut |path, schema| {
+                assert_members_have_descriptions(schema, path, "properties");
+            });
+        });
+    }
+
+    #[test]
+    fn defs_have_descriptions() {
+        for_each_schema(|path, schema| {
+            for_each_subschema(schema, path, &mut |path, schema| {
+                assert_members_have_descriptions(schema, path, "$defs");
+                assert_members_have_descriptions(schema, path, "definitions");
+            });
+        });
+    }
+}
