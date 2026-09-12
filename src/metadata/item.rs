@@ -3,6 +3,7 @@
 //! Every tool that answers with an item answers with the same address -- `kind`,
 //! `namespace`, `name` -- so that a model can hand it on to another tool unchanged.
 
+use anyhow::bail;
 use rmcp::schemars::{self, JsonSchema};
 use serde::{Deserialize, Serialize};
 use subxt_metadata::Metadata;
@@ -10,9 +11,10 @@ use subxt_metadata::Metadata;
 /// A pallet, a runtime API trait, or an item inside one of them.
 ///
 /// `runtime_api` is a trait of host-callable runtime methods; `runtime_api_method` is
-/// one method of that trait; `view_function` is a read-only query on a pallet.
+/// one method of that trait; `view_function` is a read-only query on a pallet (metadata
+/// v16 and later).
 // `Ord` is derived from declaration order: `search` sorts equally relevant hits by it,
-// and `for_each_item` visits a pallet's members in it, so reordering the variants
+// and `for_each_item` visits a pallet's items in it, so reordering the variants
 // reorders both.
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema,
@@ -71,12 +73,11 @@ pub struct ItemRef<'a> {
     pub docs: &'a [String],
 }
 
-/// Adding an `ItemKind` means adding a loop here and touching nothing else: no code
-/// downstream has a case per kind. A kind the metadata version predates simply yields
-/// nothing -- view functions before v16, runtime APIs before v15 -- so nothing checks the
-/// version.
+/// Adding an `ItemKind` means adding a loop here. A kind the metadata version predates
+/// simply yields nothing: view functions before v16, runtime APIs before v15,
+/// so nothing checks the version.
 ///
-/// A pallet's members come in `ItemKind` order, so a listing that keeps the walk's
+/// A pallet's items come in `ItemKind` order, so a listing that keeps the walk's
 /// order is grouped by kind.
 ///
 /// `ItemRef` lives only for the call: subxt ties a runtime API trait's docs to the
@@ -170,6 +171,34 @@ pub fn for_each_item(metadata: &Metadata, mut visit: impl FnMut(ItemRef<'_>)) {
     }
 }
 
+/// Find `name` among `names`, ignoring case unless that is ambiguous, and return it as
+/// the metadata spells it.
+pub fn resolve_name<'a>(
+    name: &str,
+    names: impl Iterator<Item = &'a str>,
+) -> anyhow::Result<Option<&'a str>> {
+    let mut ignoring_case = Vec::new();
+
+    for candidate in names {
+        if candidate == name {
+            return Ok(Some(candidate));
+        }
+
+        if candidate.eq_ignore_ascii_case(name) {
+            ignoring_case.push(candidate);
+        }
+    }
+
+    match ignoring_case.as_slice() {
+        [] => Ok(None),
+        [actual] => Ok(Some(actual)),
+        several => bail!(
+            "`{name}` matches several names ignoring case: {}",
+            several.join(", ")
+        ),
+    }
+}
+
 const SUMMARY_CHARS: usize = 200;
 
 fn summary(docs: &[String]) -> Option<String> {
@@ -187,6 +216,53 @@ fn summary(docs: &[String]) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn resolve_name_returns_exact_name() {
+        let names = ["System", "Balances"];
+
+        assert_eq!(
+            resolve_name("Balances", names.into_iter()).unwrap(),
+            Some("Balances")
+        );
+    }
+
+    #[test]
+    fn resolve_name_forgives_case() {
+        let names = ["System", "Balances"];
+
+        assert_eq!(
+            resolve_name("balances", names.into_iter()).unwrap(),
+            Some("Balances")
+        );
+    }
+
+    #[test]
+    fn resolve_name_prefers_exact_name_over_case_variant() {
+        let names = ["balances", "Balances"];
+
+        assert_eq!(
+            resolve_name("Balances", names.into_iter()).unwrap(),
+            Some("Balances")
+        );
+    }
+
+    #[test]
+    fn resolve_name_finds_nothing_for_unknown_name() {
+        let names = ["System", "Balances"];
+
+        assert_eq!(resolve_name("Nonsense", names.into_iter()).unwrap(), None);
+    }
+
+    #[test]
+    fn resolve_name_rejects_ambiguous_case_variants() {
+        let err = resolve_name("BALANCES", ["balances", "Balances"].into_iter()).unwrap_err();
+
+        assert_eq!(
+            err.to_string(),
+            "`BALANCES` matches several names ignoring case: balances, Balances"
+        );
+    }
 
     #[test]
     fn summary_skips_blank_lines_and_trims() {

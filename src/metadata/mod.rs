@@ -2,6 +2,7 @@
 
 mod item;
 mod namespaces;
+mod pallet_items;
 mod runtime;
 mod search;
 
@@ -12,6 +13,7 @@ use subxt_utils_fetchmetadata::{MetadataVersion, Url, from_url};
 
 pub use self::{
     namespaces::{NamespaceList, namespaces},
+    pallet_items::{PalletItems, PalletItemsRequest, pallet_items},
     runtime::{RuntimeInfo, runtime_info},
     search::{SearchRequest, SearchResults, search},
 };

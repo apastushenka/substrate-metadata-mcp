@@ -12,7 +12,8 @@ use subxt_utils_fetchmetadata::Url;
 use tokio::sync::OnceCell;
 
 use crate::metadata::{
-    self, LoadedMetadata, NamespaceList, RuntimeInfo, SearchRequest, SearchResults,
+    self, LoadedMetadata, NamespaceList, PalletItems, PalletItemsRequest, RuntimeInfo,
+    SearchRequest, SearchResults,
 };
 
 #[derive(Clone)]
@@ -56,14 +57,32 @@ impl MetadataServer {
     }
 
     /// List the runtime's pallets and runtime API traits -- the map to read first. Each
-    /// entry's `kind` says which of the two it is, and so which tool lists its members:
-    /// `pallet_members` takes a pallet's `name` as `pallet`, `runtime_api_methods` takes
+    /// entry's `kind` says which of the two it is, and so which tool lists what it contains:
+    /// `pallet_items` takes a pallet's `name` as `pallet`, `runtime_api_methods` takes
     /// a trait's `name` as `runtime_api`.
     #[tool]
     async fn namespaces(&self) -> Result<Json<NamespaceList>, String> {
         let loaded = self.metadata().await.map_err(tool_error)?;
 
         Ok(Json(metadata::namespaces(loaded)))
+    }
+
+    /// List every item of one pallet: its calls, view functions, storage entries,
+    /// constants, events and errors, grouped by kind, each kind in the order the pallet
+    /// declares it, unlike `search`, which ranks; a long listing is paged, not cut.
+    /// If `offset` plus the number of items returned is less than `total`, there are
+    /// more: repeat with a larger `offset`. A mixed page can end mid-kind, and nothing
+    /// marks that kind complete -- pass `kinds` to take one whole.
+    #[tool]
+    async fn pallet_items(
+        &self,
+        Parameters(request): Parameters<PalletItemsRequest>,
+    ) -> Result<Json<PalletItems>, String> {
+        let loaded = self.metadata().await.map_err(tool_error)?;
+
+        metadata::pallet_items(loaded, &request)
+            .map(Json)
+            .map_err(tool_error)
     }
 
     /// Find pallets, runtime APIs, calls, runtime API methods, view functions, storage
