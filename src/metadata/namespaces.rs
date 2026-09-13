@@ -1,4 +1,4 @@
-//! Listing the containers of the metadata: pallets and runtime API traits.
+//! Listing the containers of the metadata: pallets and runtime APIs.
 
 use rmcp::schemars::{self, JsonSchema};
 use serde::Serialize;
@@ -11,7 +11,7 @@ use super::{
 // A struct rather than a bare `Vec`: MCP requires `structuredContent` to be an object.
 #[derive(Debug, Serialize, JsonSchema)]
 pub struct NamespaceList {
-    /// All of them, never truncated: pallets first, then runtime API traits, each
+    /// All of them, never truncated: pallets first, then runtime APIs, each
     /// group in the order the runtime declares it. A pallet's `summary` is usually
     /// absent -- runtimes rarely document pallets in their metadata -- so a bare name
     /// is normal, not a sign of a missing pallet.

@@ -34,10 +34,9 @@ pub struct SearchRequest {
     /// so `transfer_allow_death` is found by `transfer`, by `death`, or by both, but
     /// not by `trans`. The query is split the same way, so `TransferAllowDeath` and
     /// `transfer_allow_death` work as queries. No stemming: `balance` and `balances`
-    /// are different words; use the form the metadata uses, or try both. A word may
-    /// also name the pallet or runtime API trait containing the item, which narrows
-    /// the search -- but that name alone finds the pallet or trait itself, not its
-    /// contents.
+    /// are different words; use the form the metadata uses, or try both. A word may also
+    /// name the pallet or runtime API containing the item, which narrows the search --
+    /// but that name alone finds the pallet or runtime API itself, not its contents.
     pub query: String,
 
     /// Restrict the search to these kinds of item. Empty means all of them.
@@ -56,7 +55,7 @@ pub struct SearchResults {
     /// returned, narrow the query -- these are not all of them.
     pub total: usize,
     /// The items that matched, best match first. Equally relevant hits follow the
-    /// order of `ItemKind`'s values: pallets and runtime API traits first, then what
+    /// order of `ItemKind`'s values: pallets and runtime APIs first, then what
     /// you invoke, then what you read, then what you only observe.
     pub hits: Vec<SearchHit>,
     /// Words that matched nothing anywhere in the metadata. Every word has to match for

@@ -8,11 +8,11 @@ use rmcp::schemars::{self, JsonSchema};
 use serde::{Deserialize, Serialize};
 use subxt_metadata::Metadata;
 
-/// A pallet, a runtime API trait, or an item inside one of them.
+/// A pallet, a runtime API, or an item inside one of them.
 ///
-/// `runtime_api` is a trait of host-callable runtime methods; `runtime_api_method` is
-/// one method of that trait; `view_function` is a read-only query on a pallet (metadata
-/// v16 and later).
+/// `runtime_api` is a group of host-callable runtime methods; `runtime_api_method` is
+/// one method of that group -- what polkadot-js lists as a runtime call and `state_call`
+/// invokes; `view_function` is a read-only query on a pallet (metadata v16 and later).
 // `Ord` is derived from declaration order: `search` sorts equally relevant hits by it,
 // and `for_each_item` visits a pallet's items in it, so reordering the variants
 // reorders both.
@@ -36,16 +36,16 @@ pub enum ItemKind {
 /// first line of its documentation.
 #[derive(Debug, Serialize, JsonSchema)]
 pub struct Item {
-    /// What the item is. It also fixes what `namespace` is: a runtime API trait for
+    /// What the item is. It also fixes what `namespace` is: a runtime API for
     /// `runtime_api_method`, a pallet for every other kind that has one.
     pub kind: ItemKind,
-    /// The pallet or runtime API trait the item belongs to -- which of the two is given
-    /// by `kind`. Absent for a pallet or a trait itself.
+    /// The pallet or runtime API the item belongs to -- which of the two is given
+    /// by `kind`. Absent for a pallet or a runtime API itself.
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schemars(extend("type" = "string"))]
     pub namespace: Option<String>,
     /// The item's own name, exactly as in the metadata -- without the pallet or
-    /// trait it sits in. Pass it on verbatim; do not normalize case.
+    /// runtime API it sits in. Pass it on verbatim; do not normalize case.
     pub name: String,
     /// The first line of the item's own documentation, truncated. Absent when the item has
     /// no documentation of its own.
@@ -80,7 +80,7 @@ pub struct ItemRef<'a> {
 /// A pallet's items come in `ItemKind` order, so a listing that keeps the walk's
 /// order is grouped by kind.
 ///
-/// `ItemRef` lives only for the call: subxt ties a runtime API trait's docs to the
+/// `ItemRef` lives only for the call: subxt ties a runtime API's docs to the
 /// accessor's borrow rather than to the metadata, so nothing longer can be promised.
 pub fn for_each_item(metadata: &Metadata, mut visit: impl FnMut(ItemRef<'_>)) {
     for pallet in metadata.pallets() {

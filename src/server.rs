@@ -56,10 +56,10 @@ impl MetadataServer {
         metadata::runtime_info(loaded).map(Json).map_err(tool_error)
     }
 
-    /// List the runtime's pallets and runtime API traits -- the map to read first. Each
+    /// List the runtime's pallets and runtime APIs -- the map to read first. Each
     /// entry's `kind` says which of the two it is, and so which tool lists what it contains:
     /// `pallet_items` takes a pallet's `name` as `pallet`, `runtime_api_methods` takes
-    /// a trait's `name` as `runtime_api`.
+    /// a runtime API's `name` as `runtime_api`.
     #[tool]
     async fn namespaces(&self) -> Result<Json<NamespaceList>, String> {
         let loaded = self.metadata().await.map_err(tool_error)?;
@@ -85,8 +85,8 @@ impl MetadataServer {
             .map_err(tool_error)
     }
 
-    /// List every method of one runtime API, never truncated, in the order the trait
-    /// declares them -- unlike `search`, which ranks and truncates.
+    /// List every method of one runtime API, never truncated, in the order the runtime
+    /// API declares them -- unlike `search`, which ranks and truncates.
     #[tool]
     async fn runtime_api_methods(
         &self,
