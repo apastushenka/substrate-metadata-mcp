@@ -12,8 +12,8 @@ use subxt_utils_fetchmetadata::Url;
 use tokio::sync::OnceCell;
 
 use crate::metadata::{
-    self, LoadedMetadata, NamespaceList, PalletItems, PalletItemsRequest, RuntimeInfo,
-    SearchRequest, SearchResults,
+    self, LoadedMetadata, NamespaceList, PalletItems, PalletItemsRequest, RuntimeApiMethods,
+    RuntimeApiMethodsRequest, RuntimeInfo, SearchRequest, SearchResults,
 };
 
 #[derive(Clone)]
@@ -81,6 +81,20 @@ impl MetadataServer {
         let loaded = self.metadata().await.map_err(tool_error)?;
 
         metadata::pallet_items(loaded, &request)
+            .map(Json)
+            .map_err(tool_error)
+    }
+
+    /// List every method of one runtime API, never truncated, in the order the trait
+    /// declares them -- unlike `search`, which ranks and truncates.
+    #[tool]
+    async fn runtime_api_methods(
+        &self,
+        Parameters(request): Parameters<RuntimeApiMethodsRequest>,
+    ) -> Result<Json<RuntimeApiMethods>, String> {
+        let loaded = self.metadata().await.map_err(tool_error)?;
+
+        metadata::runtime_api_methods(loaded, &request)
             .map(Json)
             .map_err(tool_error)
     }

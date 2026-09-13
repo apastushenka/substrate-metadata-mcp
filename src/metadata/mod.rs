@@ -4,6 +4,7 @@ mod item;
 mod namespaces;
 mod pallet_items;
 mod runtime;
+mod runtime_api_methods;
 mod search;
 
 use anyhow::Context;
@@ -15,6 +16,7 @@ pub use self::{
     namespaces::{NamespaceList, namespaces},
     pallet_items::{PalletItems, PalletItemsRequest, pallet_items},
     runtime::{RuntimeInfo, runtime_info},
+    runtime_api_methods::{RuntimeApiMethods, RuntimeApiMethodsRequest, runtime_api_methods},
     search::{SearchRequest, SearchResults, search},
 };
 
