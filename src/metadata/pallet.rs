@@ -6,41 +6,12 @@ use serde::{Deserialize, Serialize};
 
 use super::{
     LoadedMetadata,
-    item::{Item, ItemKind, ItemRef, for_each_item, resolve_name},
+    item::{Item, ItemRef, PalletItemKind, for_each_item, resolve_name},
 };
-
-/// What a pallet contains. The names are those of the matching `ItemKind` values, so an
-/// item listed here has the same `kind` in every response.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, JsonSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum PalletItemKind {
-    Call,
-    ViewFunction,
-    Storage,
-    Constant,
-    Event,
-    Error,
-}
-
-impl PalletItemKind {
-    /// Exhaustive on purpose: a new `ItemKind` does not compile until it is decided
-    /// whether a pallet contains it.
-    fn from_item_kind(kind: ItemKind) -> Option<Self> {
-        match kind {
-            ItemKind::Call => Some(Self::Call),
-            ItemKind::ViewFunction => Some(Self::ViewFunction),
-            ItemKind::Storage => Some(Self::Storage),
-            ItemKind::Constant => Some(Self::Constant),
-            ItemKind::Event => Some(Self::Event),
-            ItemKind::Error => Some(Self::Error),
-            ItemKind::Pallet | ItemKind::RuntimeApi | ItemKind::RuntimeApiMethod => None,
-        }
-    }
-}
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct PalletItemsRequest {
-    /// The pallet whose items to list. `namespaces` lists the valid names; case is
+    /// The pallet whose items to list. `list_namespaces` lists the valid names; case is
     /// forgiven, `balances` finds `Balances`, and the response spells the name as the
     /// metadata does. An unknown pallet is an error, so an empty result means the
     /// pallet exists and has no items of the requested kinds.
@@ -107,7 +78,7 @@ pub fn pallet_items(
     )?
     .with_context(|| {
         format!(
-            "no pallet named `{}`; `namespaces` lists the valid names",
+            "no pallet named `{}`; `list_namespaces` lists the valid names",
             request.pallet
         )
     })?;
@@ -136,6 +107,7 @@ pub fn pallet_items(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::metadata::item::ItemKind;
 
     fn request(pallet: &str, kinds: &[PalletItemKind]) -> PalletItemsRequest {
         PalletItemsRequest {

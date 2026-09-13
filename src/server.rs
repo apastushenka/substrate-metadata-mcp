@@ -50,7 +50,7 @@ impl MetadataServer {
 
     /// Identify the runtime this server indexes.
     #[tool]
-    async fn runtime_info(&self) -> Result<Json<RuntimeInfo>, String> {
+    async fn get_runtime_info(&self) -> Result<Json<RuntimeInfo>, String> {
         let loaded = self.metadata().await.map_err(tool_error)?;
 
         metadata::runtime_info(loaded).map(Json).map_err(tool_error)
@@ -58,10 +58,10 @@ impl MetadataServer {
 
     /// List the runtime's pallets and runtime APIs -- the map to read first. Each
     /// entry's `kind` says which of the two it is, and so which tool lists what it contains:
-    /// `pallet_items` takes a pallet's `name` as `pallet`, `runtime_api_methods` takes
-    /// a runtime API's `name` as `runtime_api`.
+    /// `list_pallet_items` takes a pallet's `name` as `pallet`,
+    /// `list_runtime_api_methods` takes a runtime API's `name` as `runtime_api`.
     #[tool]
-    async fn namespaces(&self) -> Result<Json<NamespaceList>, String> {
+    async fn list_namespaces(&self) -> Result<Json<NamespaceList>, String> {
         let loaded = self.metadata().await.map_err(tool_error)?;
 
         Ok(Json(metadata::namespaces(loaded)))
@@ -74,7 +74,7 @@ impl MetadataServer {
     /// more: repeat with a larger `offset`. A mixed page can end mid-kind, and nothing
     /// marks that kind complete -- pass `kinds` to take one whole.
     #[tool]
-    async fn pallet_items(
+    async fn list_pallet_items(
         &self,
         Parameters(request): Parameters<PalletItemsRequest>,
     ) -> Result<Json<PalletItems>, String> {
@@ -88,7 +88,7 @@ impl MetadataServer {
     /// List every method of one runtime API, never truncated, in the order the runtime
     /// API declares them -- unlike `search`, which ranks and truncates.
     #[tool]
-    async fn runtime_api_methods(
+    async fn list_runtime_api_methods(
         &self,
         Parameters(request): Parameters<RuntimeApiMethodsRequest>,
     ) -> Result<Json<RuntimeApiMethods>, String> {

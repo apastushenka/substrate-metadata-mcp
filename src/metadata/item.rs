@@ -32,6 +32,35 @@ pub enum ItemKind {
     Error,
 }
 
+/// What a pallet contains. The names are those of the matching `ItemKind` values, so an
+/// item listed here has the same `kind` in every response.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum PalletItemKind {
+    Call,
+    ViewFunction,
+    Storage,
+    Constant,
+    Event,
+    Error,
+}
+
+impl PalletItemKind {
+    /// Exhaustive on purpose: a new `ItemKind` does not compile until it is decided
+    /// whether a pallet contains it.
+    pub fn from_item_kind(kind: ItemKind) -> Option<Self> {
+        match kind {
+            ItemKind::Call => Some(Self::Call),
+            ItemKind::ViewFunction => Some(Self::ViewFunction),
+            ItemKind::Storage => Some(Self::Storage),
+            ItemKind::Constant => Some(Self::Constant),
+            ItemKind::Event => Some(Self::Event),
+            ItemKind::Error => Some(Self::Error),
+            ItemKind::Pallet | ItemKind::RuntimeApi | ItemKind::RuntimeApiMethod => None,
+        }
+    }
+}
+
 /// One item of the metadata: its address -- `kind`, `namespace`, `name` -- and the
 /// first line of its documentation.
 #[derive(Debug, Serialize, JsonSchema)]

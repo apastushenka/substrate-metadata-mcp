@@ -11,7 +11,7 @@ use super::{
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct RuntimeApiMethodsRequest {
-    /// The runtime API whose methods to list. `namespaces` lists the valid names;
+    /// The runtime API whose methods to list. `list_namespaces` lists the valid names;
     /// case is forgiven, `core` finds `Core`, and the response spells the name as the
     /// metadata does. An unknown runtime API is an error.
     pub runtime_api: String,
@@ -36,7 +36,7 @@ pub fn runtime_api_methods(
     )?
     .with_context(|| {
         format!(
-            "no runtime API named `{}`; `namespaces` lists the valid names",
+            "no runtime API named `{}`; `list_namespaces` lists the valid names",
             request.runtime_api
         )
     })?;

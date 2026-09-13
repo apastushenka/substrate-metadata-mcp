@@ -2,9 +2,9 @@
 
 mod item;
 mod namespaces;
-mod pallet_items;
+mod pallet;
 mod runtime;
-mod runtime_api_methods;
+mod runtime_api;
 mod search;
 
 use anyhow::Context;
@@ -14,9 +14,9 @@ use subxt_utils_fetchmetadata::{MetadataVersion, Url, from_url};
 
 pub use self::{
     namespaces::{NamespaceList, namespaces},
-    pallet_items::{PalletItems, PalletItemsRequest, pallet_items},
+    pallet::{PalletItems, PalletItemsRequest, pallet_items},
     runtime::{RuntimeInfo, runtime_info},
-    runtime_api_methods::{RuntimeApiMethods, RuntimeApiMethodsRequest, runtime_api_methods},
+    runtime_api::{RuntimeApiMethods, RuntimeApiMethodsRequest, runtime_api_methods},
     search::{SearchRequest, SearchResults, search},
 };
 
