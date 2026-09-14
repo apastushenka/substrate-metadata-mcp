@@ -12,8 +12,9 @@ use subxt_utils_fetchmetadata::Url;
 use tokio::sync::OnceCell;
 
 use crate::metadata::{
-    self, LoadedMetadata, NamespaceList, PalletItems, PalletItemsRequest, RuntimeApiMethods,
-    RuntimeApiMethodsRequest, RuntimeInfo, SearchRequest, SearchResults,
+    self, LoadedMetadata, NamespaceList, PalletItems, PalletItemsRequest, RuntimeApiMethodAddress,
+    RuntimeApiMethodDetails, RuntimeApiMethods, RuntimeApiMethodsRequest, RuntimeInfo,
+    SearchRequest, SearchResults,
 };
 
 #[derive(Clone)]
@@ -95,6 +96,22 @@ impl MetadataServer {
         let loaded = self.metadata().await.map_err(tool_error)?;
 
         metadata::runtime_api_methods(loaded, &request)
+            .map(Json)
+            .map_err(tool_error)
+    }
+
+    /// Read one method of a runtime API: uncut documentation, arguments and
+    /// return type. `search` and `list_runtime_api_methods` only name methods;
+    /// take a method's `name` from either unchanged, and its `namespace` as
+    /// `runtime_api`.
+    #[tool]
+    async fn get_runtime_api_method(
+        &self,
+        Parameters(address): Parameters<RuntimeApiMethodAddress>,
+    ) -> Result<Json<RuntimeApiMethodDetails>, String> {
+        let loaded = self.metadata().await.map_err(tool_error)?;
+
+        metadata::runtime_api_method(loaded, &address)
             .map(Json)
             .map_err(tool_error)
     }
@@ -272,6 +289,21 @@ mod tests {
                     !schema.get("const").is_some_and(Value::is_null),
                     "{path}: const is null"
                 );
+            });
+        });
+    }
+
+    #[test]
+    fn objects_declare_their_type() {
+        for_each_schema(|path, schema| {
+            for_each_subschema(schema, path, &mut |path, schema| {
+                if schema.contains_key("properties") {
+                    assert_eq!(
+                        schema.get("type").and_then(Value::as_str),
+                        Some("object"),
+                        "{path}: has properties but type is not object"
+                    );
+                }
             });
         });
     }

@@ -3,8 +3,10 @@
 mod item;
 mod namespaces;
 mod pallet;
+mod registry;
 mod runtime;
 mod runtime_api;
+mod runtime_api_method;
 mod search;
 
 use anyhow::Context;
@@ -17,6 +19,7 @@ pub use self::{
     pallet::{PalletItems, PalletItemsRequest, pallet_items},
     runtime::{RuntimeInfo, runtime_info},
     runtime_api::{RuntimeApiMethods, RuntimeApiMethodsRequest, runtime_api_methods},
+    runtime_api_method::{RuntimeApiMethodAddress, RuntimeApiMethodDetails, runtime_api_method},
     search::{SearchRequest, SearchResults, search},
 };
 

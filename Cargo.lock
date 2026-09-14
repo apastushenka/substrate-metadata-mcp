@@ -1879,6 +1879,7 @@ dependencies = [
  "frame-metadata",
  "rmcp",
  "scale-decode",
+ "scale-info",
  "serde",
  "subxt-metadata",
  "subxt-utils-fetchmetadata",

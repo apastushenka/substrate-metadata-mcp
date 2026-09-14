@@ -228,6 +228,14 @@ pub fn resolve_name<'a>(
     }
 }
 
+/// `Balances::transfer_all` or `Core.version` written into one field. Both halves have
+/// to be there -- a name that only trails a separator is a typo, not an address.
+pub fn split_qualified_name(name: &str) -> Option<(&str, &str)> {
+    let (qualifier, item) = name.rsplit_once("::").or_else(|| name.rsplit_once('.'))?;
+
+    (!qualifier.is_empty() && !item.is_empty()).then_some((qualifier, item))
+}
+
 const SUMMARY_CHARS: usize = 200;
 
 fn summary(docs: &[String]) -> Option<String> {
@@ -240,6 +248,19 @@ fn summary(docs: &[String]) -> Option<String> {
         Some((end, _)) => Some(format!("{}...", &line[..end])),
         None => Some(String::from(line)),
     }
+}
+
+/// FRAME stores the text after `///` as-is, so almost every line starts with a
+/// space. rustdoc strips exactly one; so do we. `trim_start` would also eat the
+/// indentation of code blocks. Empty lines stay: they separate paragraphs.
+pub fn docs(lines: &[String]) -> Vec<String> {
+    lines
+        .iter()
+        .map(|line| match line.strip_prefix(' ') {
+            Some(rest) => String::from(rest),
+            None => line.clone(),
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -290,6 +311,54 @@ mod tests {
         assert_eq!(
             err.to_string(),
             "`BALANCES` matches several names ignoring case: balances, Balances"
+        );
+    }
+
+    #[test]
+    fn split_qualified_name_splits_on_colons() {
+        assert_eq!(
+            split_qualified_name("Balances::transfer_all"),
+            Some(("Balances", "transfer_all"))
+        );
+        assert_eq!(
+            split_qualified_name("Core::version"),
+            Some(("Core", "version"))
+        );
+    }
+
+    #[test]
+    fn split_qualified_name_splits_on_dot() {
+        assert_eq!(
+            split_qualified_name("Balances.transfer"),
+            Some(("Balances", "transfer"))
+        );
+        assert_eq!(
+            split_qualified_name("Core.version"),
+            Some(("Core", "version"))
+        );
+    }
+
+    #[test]
+    fn split_qualified_name_leaves_plain_name_alone() {
+        assert_eq!(split_qualified_name("transfer_all"), None);
+        assert_eq!(split_qualified_name("version"), None);
+    }
+
+    #[test]
+    fn split_qualified_name_needs_both_halves() {
+        assert_eq!(split_qualified_name("transfer."), None);
+        assert_eq!(split_qualified_name("::transfer_all"), None);
+        assert_eq!(split_qualified_name("version."), None);
+        assert_eq!(split_qualified_name("::version"), None);
+    }
+
+    #[test]
+    fn docs_strips_one_leading_space() {
+        let lines = [" Transfer funds.", "No leading space", "  indented", ""].map(String::from);
+
+        assert_eq!(
+            docs(&lines),
+            ["Transfer funds.", "No leading space", " indented", "",]
         );
     }
 
