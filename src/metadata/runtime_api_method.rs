@@ -12,7 +12,7 @@ use super::{
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct RuntimeApiMethodAddress {
-    /// The runtime API the method belongs to. `list_namespaces` lists the valid names;
+    /// The runtime API the method belongs to. `list_runtime_apis` lists the valid names;
     /// take a runtime API's `name` from there, or a method's `namespace` from `search` or
     /// `list_runtime_api_methods`, as `runtime_api`. Case is forgiven, `core` finds
     /// `Core`, and the response spells the name as the metadata does. A pallet name is
@@ -122,5 +122,5 @@ fn resolve_runtime_api_name<'a>(loaded: &'a LoadedMetadata, name: &str) -> anyho
         bail!("`{pallet}` is a pallet, not a runtime API; `get_pallet_item` reads its items");
     }
 
-    bail!("no runtime API named `{name}`; `list_namespaces` lists the valid names");
+    bail!("no runtime API named `{name}`; `list_runtime_apis` lists the valid names");
 }

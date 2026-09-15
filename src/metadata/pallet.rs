@@ -11,7 +11,7 @@ use super::{
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct PalletItemsRequest {
-    /// The pallet whose items to list. `list_namespaces` lists the valid names; case is
+    /// The pallet whose items to list. `list_pallets` lists the valid names; case is
     /// forgiven, `balances` finds `Balances`, and the response spells the name as the
     /// metadata does. An unknown pallet is an error, so an empty result means the
     /// pallet exists and has no items of the requested kinds.
@@ -78,7 +78,7 @@ pub fn pallet_items(
     )?
     .with_context(|| {
         format!(
-            "no pallet named `{}`; `list_namespaces` lists the valid names",
+            "no pallet named `{}`; `list_pallets` lists the valid names",
             request.pallet
         )
     })?;

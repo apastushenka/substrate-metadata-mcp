@@ -12,9 +12,9 @@ use subxt_utils_fetchmetadata::Url;
 use tokio::sync::OnceCell;
 
 use crate::metadata::{
-    self, LoadedMetadata, NamespaceList, PalletItemAddress, PalletItemDetails, PalletItems,
-    PalletItemsRequest, RuntimeApiMethodAddress, RuntimeApiMethodDetails, RuntimeApiMethods,
-    RuntimeApiMethodsRequest, RuntimeInfo, SearchRequest, SearchResults,
+    self, LoadedMetadata, PalletItemAddress, PalletItemDetails, PalletItems, PalletItemsRequest,
+    PalletList, RuntimeApiList, RuntimeApiMethodAddress, RuntimeApiMethodDetails,
+    RuntimeApiMethods, RuntimeApiMethodsRequest, RuntimeInfo, SearchRequest, SearchResults,
 };
 
 #[derive(Clone)]
@@ -57,15 +57,29 @@ impl MetadataServer {
         metadata::runtime_info(loaded).map(Json).map_err(tool_error)
     }
 
-    /// List the runtime's pallets and runtime APIs -- the map to read first. Each
-    /// entry's `kind` says which of the two it is, and so which tool lists what it contains:
-    /// `list_pallet_items` takes a pallet's `name` as `pallet`,
-    /// `list_runtime_api_methods` takes a runtime API's `name` as `runtime_api`.
+    /// List the runtime's pallets -- the map to read first, since almost everything a
+    /// runtime does lives in one of them: its calls, view functions, storage entries,
+    /// constants, events and errors. Take a pallet's `name` from here unchanged and pass
+    /// it as `pallet` to `list_pallet_items`, which lists what the pallet contains, or to
+    /// `get_pallet_item`. The runtime's other half, the host-callable runtime APIs, is
+    /// listed by `list_runtime_apis`.
     #[tool]
-    async fn list_namespaces(&self) -> Result<Json<NamespaceList>, String> {
+    async fn list_pallets(&self) -> Result<Json<PalletList>, String> {
         let loaded = self.metadata().await.map_err(tool_error)?;
 
-        Ok(Json(metadata::namespaces(loaded)))
+        Ok(Json(metadata::pallets(loaded)))
+    }
+
+    /// List the runtime's runtime APIs -- the groups of host-callable methods that
+    /// `state_call` invokes and polkadot-js lists as runtime calls, as opposed to the
+    /// pallets, which `list_pallets` lists. Take a runtime API's `name` from here
+    /// unchanged and pass it as `runtime_api` to `list_runtime_api_methods`, which lists
+    /// its methods, or to `get_runtime_api_method`.
+    #[tool]
+    async fn list_runtime_apis(&self) -> Result<Json<RuntimeApiList>, String> {
+        let loaded = self.metadata().await.map_err(tool_error)?;
+
+        Ok(Json(metadata::runtime_apis(loaded)))
     }
 
     /// List every item of one pallet: its calls, view functions, storage entries,

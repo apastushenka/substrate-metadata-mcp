@@ -258,7 +258,7 @@ pub fn split_qualified_name(name: &str) -> Option<(&str, &str)> {
 
 const SUMMARY_CHARS: usize = 200;
 
-fn summary(docs: &[String]) -> Option<String> {
+pub fn summary(docs: &[String]) -> Option<String> {
     let line = docs
         .iter()
         .map(|line| line.trim())

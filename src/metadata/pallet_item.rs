@@ -13,7 +13,7 @@ use super::{
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct PalletItemAddress {
-    /// The pallet the item belongs to. `list_namespaces` lists the valid names; take a
+    /// The pallet the item belongs to. `list_pallets` lists the valid names; take a
     /// pallet's `name` from there, or an item's `namespace` from `search` or
     /// `list_pallet_items`, as `pallet`. Case is forgiven, `balances` finds `Balances`,
     /// and the response spells the name as the metadata does. A runtime API name is an
@@ -378,7 +378,7 @@ fn resolve_pallet_name<'a>(loaded: &'a LoadedMetadata, name: &str) -> anyhow::Re
         );
     }
 
-    bail!("no pallet named `{name}`; `list_namespaces` lists the valid names");
+    bail!("no pallet named `{name}`; `list_pallets` lists the valid names");
 }
 
 fn resolve_item_name<'a>(
