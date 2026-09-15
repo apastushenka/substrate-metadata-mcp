@@ -67,10 +67,10 @@ pub fn runtime_api_method(
         );
     }
 
-    let runtime_api = resolve_runtime_api(loaded, &address.runtime_api)?;
+    let runtime_api = resolve_runtime_api_name(loaded, &address.runtime_api)?;
     let api = metadata
         .runtime_api_trait_by_name(runtime_api)
-        .expect("resolve_runtime_api selected this runtime API");
+        .expect("resolve_runtime_api_name selected this runtime API");
 
     let method_name = resolve_name(&address.name, api.methods().map(|method| method.name()))?
         .with_context(|| {
@@ -102,7 +102,7 @@ pub fn runtime_api_method(
     })
 }
 
-fn resolve_runtime_api<'a>(loaded: &'a LoadedMetadata, name: &str) -> anyhow::Result<&'a str> {
+fn resolve_runtime_api_name<'a>(loaded: &'a LoadedMetadata, name: &str) -> anyhow::Result<&'a str> {
     let metadata = &loaded.metadata;
 
     if let Some(runtime_api) =
@@ -119,7 +119,7 @@ fn resolve_runtime_api<'a>(loaded: &'a LoadedMetadata, name: &str) -> anyhow::Re
     }
 
     if let Some(pallet) = resolve_name(name, metadata.pallets().map(|pallet| pallet.name()))? {
-        bail!("`{pallet}` is a pallet, not a runtime API");
+        bail!("`{pallet}` is a pallet, not a runtime API; `get_pallet_item` reads its items");
     }
 
     bail!("no runtime API named `{name}`; `list_namespaces` lists the valid names");

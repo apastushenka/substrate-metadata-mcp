@@ -46,6 +46,15 @@ pub enum PalletItemKind {
 }
 
 impl PalletItemKind {
+    pub const ALL: [Self; 6] = [
+        Self::Call,
+        Self::ViewFunction,
+        Self::Storage,
+        Self::Constant,
+        Self::Event,
+        Self::Error,
+    ];
+
     /// Exhaustive on purpose: a new `ItemKind` does not compile until it is decided
     /// whether a pallet contains it.
     pub fn from_item_kind(kind: ItemKind) -> Option<Self> {
@@ -57,6 +66,17 @@ impl PalletItemKind {
             ItemKind::Event => Some(Self::Event),
             ItemKind::Error => Some(Self::Error),
             ItemKind::Pallet | ItemKind::RuntimeApi | ItemKind::RuntimeApiMethod => None,
+        }
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Call => "call",
+            Self::ViewFunction => "view_function",
+            Self::Storage => "storage",
+            Self::Constant => "constant",
+            Self::Event => "event",
+            Self::Error => "error",
         }
     }
 }
@@ -312,6 +332,24 @@ mod tests {
             err.to_string(),
             "`BALANCES` matches several names ignoring case: balances, Balances"
         );
+    }
+
+    // `as_str()` is a value a model will pass back as `kind`, so it has to be one the
+    // request accepts and `PalletItemKind::ALL` has to list them all.
+    #[test]
+    fn as_str_matches_the_request_schema() {
+        let schema = schemars::schema_for!(PalletItemKind);
+        let listed = schema
+            .get("enum")
+            .and_then(|variants| variants.as_array())
+            .expect("PalletItemKind is a string enum");
+
+        let ours: Vec<&str> = PalletItemKind::ALL
+            .iter()
+            .map(|kind| kind.as_str())
+            .collect();
+
+        assert_eq!(listed, &ours);
     }
 
     #[test]

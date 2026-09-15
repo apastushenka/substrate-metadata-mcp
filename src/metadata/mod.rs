@@ -3,6 +3,7 @@
 mod item;
 mod namespaces;
 mod pallet;
+mod pallet_item;
 mod registry;
 mod runtime;
 mod runtime_api;
@@ -17,6 +18,7 @@ use subxt_utils_fetchmetadata::{MetadataVersion, Url, from_url};
 pub use self::{
     namespaces::{NamespaceList, namespaces},
     pallet::{PalletItems, PalletItemsRequest, pallet_items},
+    pallet_item::{PalletItemAddress, PalletItemDetails, pallet_item},
     runtime::{RuntimeInfo, runtime_info},
     runtime_api::{RuntimeApiMethods, RuntimeApiMethodsRequest, runtime_api_methods},
     runtime_api_method::{RuntimeApiMethodAddress, RuntimeApiMethodDetails, runtime_api_method},

@@ -12,9 +12,9 @@ use subxt_utils_fetchmetadata::Url;
 use tokio::sync::OnceCell;
 
 use crate::metadata::{
-    self, LoadedMetadata, NamespaceList, PalletItems, PalletItemsRequest, RuntimeApiMethodAddress,
-    RuntimeApiMethodDetails, RuntimeApiMethods, RuntimeApiMethodsRequest, RuntimeInfo,
-    SearchRequest, SearchResults,
+    self, LoadedMetadata, NamespaceList, PalletItemAddress, PalletItemDetails, PalletItems,
+    PalletItemsRequest, RuntimeApiMethodAddress, RuntimeApiMethodDetails, RuntimeApiMethods,
+    RuntimeApiMethodsRequest, RuntimeInfo, SearchRequest, SearchResults,
 };
 
 #[derive(Clone)]
@@ -103,7 +103,7 @@ impl MetadataServer {
     /// Read one method of a runtime API: uncut documentation, arguments and
     /// return type. `search` and `list_runtime_api_methods` only name methods;
     /// take a method's `name` from either unchanged, and its `namespace` as
-    /// `runtime_api`.
+    /// `runtime_api`. Items of a pallet are read by `get_pallet_item`.
     #[tool]
     async fn get_runtime_api_method(
         &self,
@@ -112,6 +112,24 @@ impl MetadataServer {
         let loaded = self.metadata().await.map_err(tool_error)?;
 
         metadata::runtime_api_method(loaded, &address)
+            .map(Json)
+            .map_err(tool_error)
+    }
+
+    /// Read one item of a pallet: uncut documentation and the fields of its `kind` (`call`,
+    /// `view_function`, `storage`, `constant`, `event`, `error`), including the SCALE indices that
+    /// identify a call, an event or an error, the hashers of a storage entry's keys, and a
+    /// constant's decoded value, none of which any other tool reports. `search` and
+    /// `list_pallet_items` only name items; take an item's `kind` and `name` from either unchanged,
+    /// and its `namespace` as `pallet`. A runtime API method is read by `get_runtime_api_method`.
+    #[tool]
+    async fn get_pallet_item(
+        &self,
+        Parameters(address): Parameters<PalletItemAddress>,
+    ) -> Result<Json<PalletItemDetails>, String> {
+        let loaded = self.metadata().await.map_err(tool_error)?;
+
+        metadata::pallet_item(loaded, &address)
             .map(Json)
             .map_err(tool_error)
     }
@@ -238,6 +256,16 @@ mod tests {
                 .as_object()
                 .and_then(|member| member.get("description"))
                 .and_then(Value::as_str);
+
+            // Internally tagged unions get a `kind` property with `const` and no
+            // description: the constant names the branch, and there is nothing else to
+            // say.
+            if member
+                .as_object()
+                .is_some_and(|member| member.contains_key("const"))
+            {
+                continue;
+            }
 
             assert!(
                 description.is_some_and(|text| !text.is_empty()),
