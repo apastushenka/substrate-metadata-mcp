@@ -61,8 +61,11 @@ impl MetadataServer {
     /// runtime does lives in one of them: its calls, view functions, storage entries,
     /// constants, events and errors. Take a pallet's `name` from here unchanged and pass
     /// it as `pallet` to `list_pallet_items`, which lists what the pallet contains, or to
-    /// `get_pallet_item`. The runtime's other half, the host-callable runtime APIs, is
-    /// listed by `list_runtime_apis`.
+    /// `get_pallet_item`; `counts` says beforehand which kinds that listing has anything
+    /// to show, and how many items to page through. Each entry also carries the pallet's
+    /// `index`, the byte that stands for it in encoded calls and in a `ModuleError`,
+    /// which no other tool maps back to a name. The runtime's other half, the
+    /// host-callable runtime APIs, is listed by `list_runtime_apis`.
     #[tool]
     async fn list_pallets(&self) -> Result<Json<PalletList>, String> {
         let loaded = self.metadata().await.map_err(tool_error)?;
