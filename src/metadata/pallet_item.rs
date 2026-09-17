@@ -51,10 +51,12 @@ pub struct PalletItemDetails {
     pub shape: PalletItemShape,
 }
 
-/// Kind-specific fields of a pallet item. Flattened onto the response, so they are
-/// not nested: `kind` is next to `pallet` and `name`, and the branch's fields are
-/// next to `kind`. The tag repeats the requested kind; there is one branch per
-/// `PalletItemKind`.
+// A branch's fields are serialised into the same object as `pallet`, `name`, `docs` and
+// `kind`, so none of those names can be reused inside one: nothing reports the collision,
+// not serde, not schemars, not the compiler. `flatten` also drops this type's own
+// description from the schema, so what the model needs belongs on the tool. A branch's
+// own description is read by the client and by whoever reads this file, like every
+// description on the response side.
 #[derive(Debug, Serialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum PalletItemShape {

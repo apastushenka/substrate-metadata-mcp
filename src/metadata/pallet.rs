@@ -26,7 +26,8 @@ pub struct PalletItemsRequest {
     #[serde(default)]
     pub offset: usize,
 
-    /// Items to return after `offset`. Capped at 100.
+    /// Items to return after `offset`. Capped at 100. A limit of zero returns the count
+    /// only: `items` is empty and only `total` is returned.
     #[serde(default = "default_limit")]
     pub limit: usize,
 }

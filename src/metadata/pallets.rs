@@ -27,11 +27,9 @@ pub struct PalletEntry {
     /// `list_pallet_items` and `get_pallet_item`; do not normalize case.
     pub name: String,
     /// The pallet's index, the byte that identifies it in encoded data: the first byte of
-    /// an encoded call, and the `index` of a `DispatchError::Module` or a `ModuleError`,
-    /// which name no pallet at all. It is the same byte `get_pallet_item` reports as
-    /// `pallet_index` for a call, an event or an error. Nothing else here turns such a
-    /// byte back into a name, so scan this listing for it. The byte within the pallet
-    /// that picks the call, event or error itself comes from `get_pallet_item`.
+    /// an encoded call, and the `index` of a `DispatchError::Module` or a `ModuleError`.
+    /// The same byte comes back as `pallet_index` on a call, an event or an error, each of
+    /// which carries a second index of its own to pick the variant within the pallet.
     pub index: u8,
     /// The first line of the pallet's own documentation, truncated. Usually absent:
     /// runtimes rarely document pallets in their metadata, so a bare name is normal and

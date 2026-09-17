@@ -49,7 +49,17 @@ impl MetadataServer {
             .await
     }
 
-    /// Identify the runtime this server indexes.
+    /// Identify the runtime this server indexes: its spec name, its spec and transaction
+    /// versions, the SS58 prefix it renders account addresses with, and the version of the
+    /// metadata format it was decoded from. The SS58 prefix is missing when the runtime
+    /// declares none or it could not be read.
+    ///
+    /// The metadata version gates what every other tool can show: a kind the format
+    /// predates has no items anywhere, so a listing of it comes back empty and reading one
+    /// fails with a message naming the version it needs.
+    ///
+    /// All of it is read from the metadata itself, so it describes the runtime the
+    /// metadata was fetched from, not the live state of the chain.
     #[tool]
     async fn get_runtime_info(&self) -> Result<Json<RuntimeInfo>, String> {
         let loaded = self.metadata().await.map_err(tool_error)?;
@@ -57,15 +67,18 @@ impl MetadataServer {
         metadata::runtime_info(loaded).map(Json).map_err(tool_error)
     }
 
-    /// List the runtime's pallets -- the map to read first, since almost everything a
-    /// runtime does lives in one of them: its calls, view functions, storage entries,
-    /// constants, events and errors. Take a pallet's `name` from here unchanged and pass
-    /// it as `pallet` to `list_pallet_items`, which lists what the pallet contains, or to
-    /// `get_pallet_item`; `counts` says beforehand which kinds that listing has anything
-    /// to show, and how many items to page through. Each entry also carries the pallet's
-    /// `index`, the byte that stands for it in encoded calls and in a `ModuleError`,
-    /// which no other tool maps back to a name. The runtime's other half, the
-    /// host-callable runtime APIs, is listed by `list_runtime_apis`.
+    /// List every pallet of the runtime, never truncated. Almost everything a runtime does
+    /// lives in a pallet.
+    ///
+    /// An entry names a pallet and carries its `index`. A `summary` is usually missing:
+    /// runtimes rarely document a pallet at all, so a bare name is normal.
+    ///
+    /// `counts` says how many items of each kind the pallet holds, so a listing can be
+    /// sized before it is requested. A zero there means there is nothing to list, whether
+    /// the pallet declares none of that kind or the metadata version predates it.
+    ///
+    /// A `ModuleError` identifies its pallet by `index` and never by name. No other tool
+    /// maps that byte back to a name, so look it up in this listing.
     #[tool]
     async fn list_pallets(&self) -> Result<Json<PalletList>, String> {
         let loaded = self.metadata().await.map_err(tool_error)?;
@@ -73,11 +86,12 @@ impl MetadataServer {
         Ok(Json(metadata::pallets(loaded)))
     }
 
-    /// List the runtime's runtime APIs -- the groups of host-callable methods that
-    /// `state_call` invokes and polkadot-js lists as runtime calls, as opposed to the
-    /// pallets, which `list_pallets` lists. Take a runtime API's `name` from here
-    /// unchanged and pass it as `runtime_api` to `list_runtime_api_methods`, which lists
-    /// its methods, or to `get_runtime_api_method`.
+    /// List every runtime API of the runtime, never truncated. Each one is a group of
+    /// host-callable methods: `state_call` invokes them, and polkadot-js lists them as
+    /// runtime calls. An entry names one and gives the first line of its documentation
+    /// when it has one.
+    ///
+    /// The list is empty under metadata v14, which carries no runtime APIs at all.
     #[tool]
     async fn list_runtime_apis(&self) -> Result<Json<RuntimeApiList>, String> {
         let loaded = self.metadata().await.map_err(tool_error)?;
@@ -85,12 +99,16 @@ impl MetadataServer {
         Ok(Json(metadata::runtime_apis(loaded)))
     }
 
-    /// List every item of one pallet: its calls, view functions, storage entries,
-    /// constants, events and errors, grouped by kind, each kind in the order the pallet
-    /// declares it, unlike `search`, which ranks; a long listing is paged, not cut.
-    /// If `offset` plus the number of items returned is less than `total`, there are
-    /// more: repeat with a larger `offset`. A mixed page can end mid-kind, and nothing
-    /// marks that kind complete -- pass `kinds` to take one whole.
+    /// List what one pallet contains, paged and never truncated. `search` ranks and
+    /// truncates instead. An entry names an item and gives the first line of its
+    /// documentation, not its contents.
+    ///
+    /// `total` counts the whole listing, before `offset` and `limit`: there is more
+    /// whenever `offset` plus the number of items returned is less than `total`.
+    ///
+    /// Items are grouped by kind, and within a kind they follow the order the pallet
+    /// declares them. A page of mixed kinds can therefore end in the middle of one, and
+    /// nothing marks a kind as finished. Pass `kinds` to retrieve one kind in full.
     #[tool]
     async fn list_pallet_items(
         &self,
@@ -103,8 +121,9 @@ impl MetadataServer {
             .map_err(tool_error)
     }
 
-    /// List every method of one runtime API, never truncated, in the order the runtime
-    /// API declares them -- unlike `search`, which ranks and truncates.
+    /// List every method of one runtime API, never truncated. `search` ranks and truncates
+    /// instead. An entry names a method and gives the first line of its documentation, not
+    /// its signature.
     #[tool]
     async fn list_runtime_api_methods(
         &self,
@@ -117,10 +136,9 @@ impl MetadataServer {
             .map_err(tool_error)
     }
 
-    /// Read one method of a runtime API: uncut documentation, arguments and
-    /// return type. `search` and `list_runtime_api_methods` only name methods;
-    /// take a method's `name` from either unchanged, and its `namespace` as
-    /// `runtime_api`. Items of a pallet are read by `get_pallet_item`.
+    /// Read one method of a runtime API in full: its complete documentation and its
+    /// signature. Only this tool reports the signature, the type of every argument and of
+    /// the return value.
     #[tool]
     async fn get_runtime_api_method(
         &self,
@@ -133,12 +151,25 @@ impl MetadataServer {
             .map_err(tool_error)
     }
 
-    /// Read one item of a pallet: uncut documentation and the fields of its `kind` (`call`,
-    /// `view_function`, `storage`, `constant`, `event`, `error`), including the SCALE indices that
-    /// identify a call, an event or an error, the hashers of a storage entry's keys, and a
-    /// constant's decoded value, none of which any other tool reports. `search` and
-    /// `list_pallet_items` only name items; take an item's `kind` and `name` from either unchanged,
-    /// and its `namespace` as `pallet`. A runtime API method is read by `get_runtime_api_method`.
+    /// Read one item of a pallet in full: its complete documentation and the fields that
+    /// its `kind` determines.
+    ///
+    /// Only this tool reports those fields: the SCALE indices that identify a call, an
+    /// event or an error, the hashers of a storage entry's keys, a constant's decoded
+    /// value. The one exception is `pallet_index`, the byte the pallet listing already
+    /// carries as `index`. The second index, which selects the variant within the pallet,
+    /// comes from here alone; it is the codec index (`#[codec(index = N)]`), not a
+    /// position in any listing, and FRAME leaves gaps in it.
+    ///
+    /// A storage entry carries `default` exactly when `optional` is false, so a missing
+    /// `default` is expected rather than an error. A call has no return type in the
+    /// metadata, so no tool reports one.
+    ///
+    /// A constant's `value` and a storage entry's `default` are scale-value text, not
+    /// JSON: `None ()` is the absent variant, a single parenthesised number is a one-field
+    /// wrapper rather than a number, and a byte array such as an `AccountId32` is a list
+    /// of decimal numbers, not hex. The exception is a `u256` or an `i256`, which has no
+    /// text form and is returned as hex.
     #[tool]
     async fn get_pallet_item(
         &self,
@@ -151,11 +182,22 @@ impl MetadataServer {
             .map_err(tool_error)
     }
 
-    /// Find pallets, runtime APIs, calls, runtime API methods, view functions, storage
-    /// entries, constants, events and errors whose name or documentation matches a query.
-    /// The runtime's metadata is far too large to read whole; this is how you locate
-    /// something in it. Results are ranked and truncated -- check `total` before assuming
-    /// you have all of them.
+    /// Find any item of the metadata whose name or documentation matches a query. The
+    /// runtime's metadata is far too large to read whole, and this is how to locate
+    /// something in it. A hit names an item and gives the first line of its documentation,
+    /// not its contents.
+    ///
+    /// Use it when you do not know where something is. If you already know the name, read
+    /// that item directly; to see everything one pallet holds, list it. Both are complete,
+    /// while this is ranked and truncated.
+    ///
+    /// There is no paging: hits beyond `limit` cannot be retrieved. `total` counts every
+    /// match, so a `total` larger than the number of hits means the result is incomplete;
+    /// narrow the query rather than repeat it.
+    ///
+    /// Every word of the query must match for an item to be returned, so `unmatched`
+    /// explains an empty result. A hit whose `matched_in` is `docs` matched only the
+    /// documentation: check it rather than trust it.
     #[tool]
     async fn search(
         &self,

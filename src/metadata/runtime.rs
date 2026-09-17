@@ -16,8 +16,6 @@ mod system {
     pub const SS58_PREFIX: &str = "SS58Prefix";
 }
 
-/// Which runtime this is. Read out of the metadata itself, so it describes the
-/// runtime the metadata was fetched from rather than the live state of the chain.
 #[derive(Debug, Clone, Serialize, JsonSchema)]
 pub struct RuntimeInfo {
     /// Version of the metadata format the node served.

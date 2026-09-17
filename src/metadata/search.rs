@@ -43,8 +43,8 @@ pub struct SearchRequest {
     #[serde(default)]
     pub kinds: Vec<ItemKind>,
 
-    /// How many hits to return, best match first. Capped at 100. Zero is a count:
-    /// `hits` is empty and only `total` and `unmatched` are returned.
+    /// How many hits to return, best match first. Capped at 100. A limit of zero returns
+    /// the count only: `hits` is empty and only `total` and `unmatched` are returned.
     #[serde(default = "default_limit")]
     pub limit: usize,
 }
