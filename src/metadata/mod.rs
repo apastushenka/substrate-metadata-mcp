@@ -1,14 +1,14 @@
 //! Fetching and decoding runtime metadata, and reading facts out of it.
 
 mod item;
-mod pallet;
 mod pallet_item;
+mod pallet_items;
 mod pallets;
 mod registry;
-mod runtime;
-mod runtime_api;
 mod runtime_api_method;
+mod runtime_api_methods;
 mod runtime_apis;
+mod runtime_info;
 mod search;
 
 use anyhow::Context;
@@ -17,13 +17,13 @@ use subxt_metadata::{Metadata, decode_runtime_metadata};
 use subxt_utils_fetchmetadata::{MetadataVersion, Url, from_url};
 
 pub use self::{
-    pallet::{PalletItems, PalletItemsRequest, pallet_items},
     pallet_item::{PalletItemAddress, PalletItemDetails, pallet_item},
+    pallet_items::{PalletItems, PalletItemsRequest, pallet_items},
     pallets::{PalletList, pallets},
-    runtime::{RuntimeInfo, runtime_info},
-    runtime_api::{RuntimeApiMethods, RuntimeApiMethodsRequest, runtime_api_methods},
     runtime_api_method::{RuntimeApiMethodAddress, RuntimeApiMethodDetails, runtime_api_method},
+    runtime_api_methods::{RuntimeApiMethods, RuntimeApiMethodsRequest, runtime_api_methods},
     runtime_apis::{RuntimeApiList, runtime_apis},
+    runtime_info::{RuntimeInfo, runtime_info},
     search::{SearchRequest, SearchResults, search},
 };
 
