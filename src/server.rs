@@ -23,6 +23,11 @@ pub struct MetadataServer {
     metadata: Arc<OnceCell<LoadedMetadata>>,
 }
 
+// Every tool declares `read_only_hint` true and `open_world_hint` false. The server does
+// reach the network: `metadata` fetches from the node, and retries inside a tool call
+// whenever the startup preload failed. The world stays closed because the endpoint is
+// fixed by `--url` and no tool argument can widen it. A tool that took a URL would have
+// to flip `open_world_hint`.
 #[tool_router]
 impl MetadataServer {
     pub fn new(url: Url) -> Self {
@@ -60,7 +65,7 @@ impl MetadataServer {
     ///
     /// All of it is read from the metadata itself, so it describes the runtime the
     /// metadata was fetched from, not the live state of the chain.
-    #[tool]
+    #[tool(annotations(read_only_hint = true, open_world_hint = false))]
     async fn get_runtime_info(&self) -> Result<Json<RuntimeInfo>, String> {
         let loaded = self.metadata().await.map_err(tool_error)?;
 
@@ -79,7 +84,7 @@ impl MetadataServer {
     ///
     /// A `ModuleError` identifies its pallet by `index` and never by name. No other tool
     /// maps that byte back to a name, so look it up in this listing.
-    #[tool]
+    #[tool(annotations(read_only_hint = true, open_world_hint = false))]
     async fn list_pallets(&self) -> Result<Json<PalletList>, String> {
         let loaded = self.metadata().await.map_err(tool_error)?;
 
@@ -92,7 +97,7 @@ impl MetadataServer {
     /// when it has one.
     ///
     /// The list is empty under metadata v14, which carries no runtime APIs at all.
-    #[tool]
+    #[tool(annotations(read_only_hint = true, open_world_hint = false))]
     async fn list_runtime_apis(&self) -> Result<Json<RuntimeApiList>, String> {
         let loaded = self.metadata().await.map_err(tool_error)?;
 
@@ -109,7 +114,7 @@ impl MetadataServer {
     /// Items are grouped by kind, and within a kind they follow the order the pallet
     /// declares them. A page of mixed kinds can therefore end in the middle of one, and
     /// nothing marks a kind as finished. Pass `kinds` to retrieve one kind in full.
-    #[tool]
+    #[tool(annotations(read_only_hint = true, open_world_hint = false))]
     async fn list_pallet_items(
         &self,
         Parameters(request): Parameters<PalletItemsRequest>,
@@ -124,7 +129,7 @@ impl MetadataServer {
     /// List every method of one runtime API, never truncated. `search` ranks and truncates
     /// instead. An entry names a method and gives the first line of its documentation, not
     /// its signature.
-    #[tool]
+    #[tool(annotations(read_only_hint = true, open_world_hint = false))]
     async fn list_runtime_api_methods(
         &self,
         Parameters(request): Parameters<RuntimeApiMethodsRequest>,
@@ -139,7 +144,7 @@ impl MetadataServer {
     /// Read one method of a runtime API in full: its complete documentation and its
     /// signature. Only this tool reports the signature, the type of every argument and of
     /// the return value.
-    #[tool]
+    #[tool(annotations(read_only_hint = true, open_world_hint = false))]
     async fn get_runtime_api_method(
         &self,
         Parameters(address): Parameters<RuntimeApiMethodAddress>,
@@ -170,7 +175,7 @@ impl MetadataServer {
     /// wrapper rather than a number, and a byte array such as an `AccountId32` is a list
     /// of decimal numbers, not hex. The exception is a `u256` or an `i256`, which has no
     /// text form and is returned as hex.
-    #[tool]
+    #[tool(annotations(read_only_hint = true, open_world_hint = false))]
     async fn get_pallet_item(
         &self,
         Parameters(address): Parameters<PalletItemAddress>,
@@ -198,7 +203,7 @@ impl MetadataServer {
     /// Every word of the query must match for an item to be returned, so `unmatched`
     /// explains an empty result. A hit whose `matched_in` is `docs` matched only the
     /// documentation: check it rather than trust it.
-    #[tool]
+    #[tool(annotations(read_only_hint = true, open_world_hint = false))]
     async fn search(
         &self,
         Parameters(request): Parameters<SearchRequest>,
@@ -329,6 +334,27 @@ mod tests {
             assert!(
                 description.is_some_and(|text| !text.is_empty()),
                 "{path}/{key}/{name}: missing description"
+            );
+        }
+    }
+
+    #[test]
+    fn tools_declare_read_only_and_no_open_world() {
+        for tool in MetadataServer::tool_router().list_all() {
+            let annotations = tool.annotations.as_ref();
+
+            assert_eq!(
+                annotations.and_then(|annotations| annotations.read_only_hint),
+                Some(true),
+                "{}: read_only_hint is not true",
+                tool.name
+            );
+
+            assert_eq!(
+                annotations.and_then(|annotations| annotations.open_world_hint),
+                Some(false),
+                "{}: open_world_hint is not false",
+                tool.name
             );
         }
     }
