@@ -2,7 +2,17 @@
 name = "substrate-metadata-mcp"
 version = "0.1.0"
 edition = "2024"
+description = "Read-only MCP server that indexes a Substrate runtime's metadata: pallets and runtime APIs. Lists, searches and reads calls, storage, events, errors, constants, view functions and API methods, without touching chain state."
+repository = "https://github.com/apastushenka/substrate-metadata-mcp"
 license = "MIT OR Apache-2.0"
+keywords = ["substrate", "polkadot", "subxt", "mcp", "metadata"]
+categories = ["command-line-utilities", "development-tools"]
+exclude = ["CLAUDE.md"]
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
 
 [dependencies]
 anyhow = { version = "1.0.100" }
