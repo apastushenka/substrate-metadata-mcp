@@ -5,7 +5,7 @@ use std::sync::Arc;
 use rmcp::{
     Json, ServerHandler,
     handler::server::wrapper::Parameters,
-    model::{Implementation, ServerCapabilities, ServerInfo},
+    model::{Implementation, ServerCapabilities, ServerConfig},
     tool, tool_handler, tool_router,
 };
 use subxt_utils_fetchmetadata::Url;
@@ -218,10 +218,10 @@ impl MetadataServer {
 
 #[tool_handler]
 impl ServerHandler for MetadataServer {
-    fn get_info(&self) -> ServerInfo {
+    fn get_info(&self) -> ServerConfig {
         let capabilities = ServerCapabilities::builder().enable_tools().build();
 
-        ServerInfo::new(capabilities)
+        ServerConfig::new(capabilities)
             .with_server_info(Implementation::new(
                 env!("CARGO_PKG_NAME"),
                 env!("CARGO_PKG_VERSION"),
