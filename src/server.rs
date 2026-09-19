@@ -227,7 +227,12 @@ impl ServerHandler for MetadataServer {
                 env!("CARGO_PKG_VERSION"),
             ))
             .with_instructions(format!(
-                "Read-only index of the Substrate runtime metadata at {}.",
+                "Read-only index of the Substrate runtime metadata at {}, \
+                 a snapshot loaded once and never refreshed. Covers pallets \
+                 with their calls, storage, events, errors, constants and \
+                 view functions; runtime APIs with their methods. Not \
+                 a chain client: no account state, no blocks, no extrinsic \
+                 submission.",
                 self.url
             ))
     }
