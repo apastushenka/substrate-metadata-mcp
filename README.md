@@ -14,6 +14,8 @@ no view functions.
 cargo install substrate-metadata-mcp
 ```
 
+Building from source needs Rust 1.88 or newer.
+
 ## Usage
 
 The only required argument is the node endpoint (ws, wss, http, or https):
