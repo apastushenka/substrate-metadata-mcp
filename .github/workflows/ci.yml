@@ -1,31 +1,71 @@
 name: CI
 
 on:
+  workflow_dispatch:
   pull_request:
+  # A PR green on a stale base can still break main, so the merge result is checked too.
   push:
     branches: [main]
+
+permissions:
+  contents: read
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
   fmt:
-    runs-on: ubuntu-latest
+    name: "cargo fmt"
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@nightly
-        with:
-          components: rustfmt
+      - uses: actions/checkout@v7
+
       # Unstable rustfmt options in rustfmt.toml; stable ignores them silently.
+      # A third-party action, so it is pinned to a commit, here and below.
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: nightly
+          components: rustfmt
+
       - run: cargo fmt --check
 
   check:
-    runs-on: ubuntu-latest
+    name: "cargo clippy, test, package"
+    runs-on: ubuntu-26.04
+    timeout-minutes: 20
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
         with:
+          toolchain: stable
           components: clippy
-      - uses: Swatinem/rust-cache@v2
-      - run: cargo clippy --all-targets -- -D warnings
-      - run: cargo test
+
+      # --locked throughout: Cargo.lock is committed, and without it a stale lock
+      # resolves afresh here and passes, then fails wherever it is enforced.
+      - run: cargo clippy --locked --all-targets -- -D warnings
+
+      - run: cargo test --locked
+
+      # Not publishing: this builds the crate the way crates.io will, so broken
+      # metadata and files missing from the package fail here, not at release.
+      # It reuses the dependencies the steps above compiled.
+      - run: cargo publish --dry-run --locked
+
+  msrv:
+    name: "cargo check (msrv)"
+    runs-on: ubuntu-26.04
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v7
+
+      # Pinned to rust-version in Cargo.toml; the two move together or the claim rots.
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: 1.88.0
+
+      - run: cargo check --locked --all-targets
