@@ -12,6 +12,7 @@ use super::{
 };
 
 #[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct PalletItemAddress {
     /// The pallet the item belongs to. `list_pallets` lists the valid names; take a
     /// pallet's `name` from there, or an item's `namespace` from `search` or

@@ -10,6 +10,7 @@ use super::{
 };
 
 #[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct PalletItemsRequest {
     /// The pallet whose items to list. `list_pallets` lists the valid names; case is
     /// forgiven, `balances` finds `Balances`, and the response spells the name as the

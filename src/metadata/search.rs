@@ -28,6 +28,7 @@ pub enum MatchedIn {
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct SearchRequest {
     /// Words to look for; an item matches only if it matches every one. Matching is by
     /// whole word, not by fragment: names are split on underscores and case boundaries,

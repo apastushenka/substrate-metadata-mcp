@@ -375,6 +375,32 @@ mod tests {
         }
     }
 
+    // A request type without `deny_unknown_fields` drops a field the model made up without a
+    // word, and the model goes on to trust a filter that never ran. Tools without arguments are
+    // exempt: they always return their whole listing, so a dropped argument cannot pass for a
+    // filter.
+    #[test]
+    fn tools_reject_undeclared_arguments() {
+        for tool in MetadataServer::tool_router().list_all() {
+            let takes_arguments = tool
+                .input_schema
+                .get("properties")
+                .and_then(Value::as_object)
+                .is_some_and(|properties| !properties.is_empty());
+
+            if !takes_arguments {
+                continue;
+            }
+
+            assert_eq!(
+                tool.input_schema.get("additionalProperties"),
+                Some(&Value::Bool(false)),
+                "{}: accepts arguments it does not declare",
+                tool.name
+            );
+        }
+    }
+
     #[test]
     fn option_fields_have_single_type() {
         for_each_schema(|path, schema| {
