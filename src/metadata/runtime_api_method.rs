@@ -11,6 +11,7 @@ use super::{
 };
 
 #[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct RuntimeApiMethodAddress {
     /// The runtime API the method belongs to. `list_runtime_apis` lists the valid names;
     /// take a runtime API's `name` from there, or a method's `namespace` from `search` or

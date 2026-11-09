@@ -10,6 +10,7 @@ use super::{
 };
 
 #[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct RuntimeApiMethodsRequest {
     /// The runtime API whose methods to list. `list_runtime_apis` lists the valid names;
     /// case is forgiven, `core` finds `Core`, and the response spells the name as the
