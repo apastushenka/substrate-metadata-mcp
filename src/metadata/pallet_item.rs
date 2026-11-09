@@ -2,8 +2,11 @@
 
 use anyhow::{Context, bail};
 use rmcp::schemars::{self, JsonSchema};
+use scale_info::{PortableRegistry, Variant, form::PortableForm};
 use serde::{Deserialize, Serialize};
-use subxt_metadata::{PalletMetadata, StorageHasher};
+use subxt_metadata::{
+    ConstantMetadata, PalletMetadata, StorageEntryMetadata, StorageHasher, ViewFunctionMetadata,
+};
 
 use super::{
     LoadedMetadata,
@@ -216,43 +219,20 @@ pub fn pallet_item(
     let name = resolve_item_name(&pallet, address, loaded.version)?;
     let types = loaded.metadata.types();
 
-    let (docs, shape) = match address.kind {
+    match address.kind {
         PalletItemKind::Call => {
             let variant = pallet
                 .call_variant_by_name(name)
                 .expect("resolve_item_name found this call");
 
-            let arguments = variant
-                .fields
-                .iter()
-                .map(|field| Field::from_field(field, types))
-                .collect();
-
-            (
-                docs(&variant.docs),
-                PalletItemShape::Call {
-                    pallet_index: pallet.call_index(),
-                    call_index: variant.index,
-                    arguments,
-                },
-            )
+            Ok(call_details(&pallet, variant, types))
         }
         PalletItemKind::ViewFunction => {
             let view_function = pallet
                 .view_function_by_name(name)
                 .expect("resolve_item_name found this view function");
 
-            let arguments = view_function
-                .inputs()
-                .map(|input| Field::from_view_function_input(input, types))
-                .collect();
-
-            let returns = type_name(view_function.output_ty(), types);
-
-            (
-                docs(view_function.docs()),
-                PalletItemShape::ViewFunction { arguments, returns },
-            )
+            Ok(view_function_details(&pallet, &view_function, types))
         }
         PalletItemKind::Storage => {
             let entry = pallet
@@ -260,55 +240,14 @@ pub fn pallet_item(
                 .and_then(|storage| storage.entry_by_name(name))
                 .expect("resolve_item_name found this storage entry");
 
-            let keys = entry
-                .keys()
-                .map(|key| StorageKey {
-                    hasher: Hasher::from(key.hasher),
-                    ty: type_name(key.key_id, types),
-                })
-                .collect();
-
-            let value_type = type_name(entry.value_ty(), types);
-
-            let default = entry.default_value()
-                .map(|bytes| {
-                    render_value(bytes, entry.value_ty(), types).with_context(|| {
-                        format!(
-                            "cannot decode the default of storage entry `{name}` in pallet `{}` as `{value_type}`",
-                            pallet.name(),
-                        )
-                    })
-                })
-                .transpose()?;
-
-            (
-                docs(entry.docs()),
-                PalletItemShape::Storage {
-                    keys,
-                    value_type,
-                    optional: entry.default_value().is_none(),
-                    default,
-                },
-            )
+            storage_details(&pallet, entry, types)
         }
         PalletItemKind::Constant => {
             let constant = pallet
                 .constant_by_name(name)
                 .expect("resolve_item_name found this constant");
 
-            let ty = type_name(constant.ty(), types);
-            let value =
-                render_value(constant.value(), constant.ty(), types).with_context(|| {
-                    format!(
-                        "cannot decode the value of constant `{name}` in pallet `{}` as `{ty}`",
-                        pallet.name(),
-                    )
-                })?;
-
-            (
-                docs(constant.docs()),
-                PalletItemShape::Constant { ty, value },
-            )
+            constant_details(&pallet, constant, types)
         }
         PalletItemKind::Event => {
             let variant = pallet
@@ -318,20 +257,7 @@ pub fn pallet_item(
                 .find(|variant| variant.name == name)
                 .expect("resolve_item_name found this event");
 
-            let fields = variant
-                .fields
-                .iter()
-                .map(|field| Field::from_field(field, types))
-                .collect();
-
-            (
-                docs(&variant.docs),
-                PalletItemShape::Event {
-                    pallet_index: pallet.event_index(),
-                    event_index: variant.index,
-                    fields,
-                },
-            )
+            Ok(event_details(&pallet, variant, types))
         }
         PalletItemKind::Error => {
             let variant = pallet
@@ -341,29 +267,153 @@ pub fn pallet_item(
                 .find(|variant| variant.name == name)
                 .expect("resolve_item_name found this error");
 
-            let fields = variant
-                .fields
-                .iter()
-                .map(|field| Field::from_field(field, types))
-                .collect();
-
-            (
-                docs(&variant.docs),
-                PalletItemShape::Error {
-                    pallet_index: pallet.error_index(),
-                    error_index: variant.index,
-                    fields,
-                },
-            )
+            Ok(error_details(&pallet, variant, types))
         }
-    };
+    }
+}
+
+fn call_details(
+    pallet: &PalletMetadata<'_>,
+    variant: &Variant<PortableForm>,
+    types: &PortableRegistry,
+) -> PalletItemDetails {
+    PalletItemDetails {
+        pallet: String::from(pallet.name()),
+        name: variant.name.clone(),
+        docs: docs(&variant.docs),
+        shape: PalletItemShape::Call {
+            pallet_index: pallet.call_index(),
+            call_index: variant.index,
+            arguments: variant_fields(variant, types),
+        },
+    }
+}
+
+fn view_function_details(
+    pallet: &PalletMetadata<'_>,
+    view_function: &ViewFunctionMetadata<'_>,
+    types: &PortableRegistry,
+) -> PalletItemDetails {
+    let arguments = view_function
+        .inputs()
+        .map(|input| Field::from_view_function_input(input, types))
+        .collect();
+
+    PalletItemDetails {
+        pallet: String::from(pallet.name()),
+        name: String::from(view_function.name()),
+        docs: docs(view_function.docs()),
+        shape: PalletItemShape::ViewFunction {
+            arguments,
+            returns: type_name(view_function.output_ty(), types),
+        },
+    }
+}
+
+fn storage_details(
+    pallet: &PalletMetadata<'_>,
+    entry: &StorageEntryMetadata,
+    types: &PortableRegistry,
+) -> anyhow::Result<PalletItemDetails> {
+    let keys = entry
+        .keys()
+        .map(|key| StorageKey {
+            hasher: Hasher::from(key.hasher),
+            ty: type_name(key.key_id, types),
+        })
+        .collect();
+
+    let value_type = type_name(entry.value_ty(), types);
+
+    let default = entry
+        .default_value()
+        .map(|bytes| {
+            render_value(bytes, entry.value_ty(), types).with_context(|| {
+                format!(
+                    "cannot decode the default of storage entry `{}` in pallet `{}` as `{value_type}`",
+                    entry.name(),
+                    pallet.name(),
+                )
+            })
+        })
+        .transpose()?;
 
     Ok(PalletItemDetails {
         pallet: String::from(pallet.name()),
-        name: String::from(name),
-        docs,
-        shape,
+        name: String::from(entry.name()),
+        docs: docs(entry.docs()),
+        shape: PalletItemShape::Storage {
+            keys,
+            value_type,
+            optional: entry.default_value().is_none(),
+            default,
+        },
     })
+}
+
+fn constant_details(
+    pallet: &PalletMetadata<'_>,
+    constant: &ConstantMetadata,
+    types: &PortableRegistry,
+) -> anyhow::Result<PalletItemDetails> {
+    let ty = type_name(constant.ty(), types);
+
+    let value = render_value(constant.value(), constant.ty(), types).with_context(|| {
+        format!(
+            "cannot decode the value of constant `{}` in pallet `{}` as `{ty}`",
+            constant.name(),
+            pallet.name(),
+        )
+    })?;
+
+    Ok(PalletItemDetails {
+        pallet: String::from(pallet.name()),
+        name: String::from(constant.name()),
+        docs: docs(constant.docs()),
+        shape: PalletItemShape::Constant { ty, value },
+    })
+}
+
+fn event_details(
+    pallet: &PalletMetadata<'_>,
+    variant: &Variant<PortableForm>,
+    types: &PortableRegistry,
+) -> PalletItemDetails {
+    PalletItemDetails {
+        pallet: String::from(pallet.name()),
+        name: variant.name.clone(),
+        docs: docs(&variant.docs),
+        shape: PalletItemShape::Event {
+            pallet_index: pallet.event_index(),
+            event_index: variant.index,
+            fields: variant_fields(variant, types),
+        },
+    }
+}
+
+fn error_details(
+    pallet: &PalletMetadata<'_>,
+    variant: &Variant<PortableForm>,
+    types: &PortableRegistry,
+) -> PalletItemDetails {
+    PalletItemDetails {
+        pallet: String::from(pallet.name()),
+        name: variant.name.clone(),
+        docs: docs(&variant.docs),
+        shape: PalletItemShape::Error {
+            pallet_index: pallet.error_index(),
+            error_index: variant.index,
+            fields: variant_fields(variant, types),
+        },
+    }
+}
+
+fn variant_fields(variant: &Variant<PortableForm>, types: &PortableRegistry) -> Vec<Field> {
+    variant
+        .fields
+        .iter()
+        .map(|field| Field::from_field(field, types))
+        .collect()
 }
 
 fn resolve_pallet_name<'a>(loaded: &'a LoadedMetadata, name: &str) -> anyhow::Result<&'a str> {
