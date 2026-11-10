@@ -4,6 +4,10 @@
   Only `Context` and the macros are imported from `anyhow`.
 - A two-parameter `Result<T, E>` is `core::result::Result` from the prelude.
   A function that does not return `anyhow::Error` must not look like an anyhow function.
+- An item used outside its module is `pub`, and private modules limit its reach; a parent
+  re-exports with `pub use` what the rest of the crate needs. Reserve `pub(super)` and
+  `pub(crate)` for what module privacy cannot hide: a helper method on a type that is or
+  will be public.
 - Format with `cargo +nightly fmt`. `rustfmt.toml` enables unstable options that
   stable rustfmt silently ignores, so formatting done on stable will not match.
 - Do not comment what the code already says, and never write a doc comment that only
