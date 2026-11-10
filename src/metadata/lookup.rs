@@ -271,17 +271,6 @@ pub fn runtime_api_method<'a>(
     }
 }
 
-/// `resolve` over bare names, for a caller that needs the name and nothing else.
-pub fn resolve_name<'a>(
-    name: &str,
-    names: impl IntoIterator<Item = &'a str>,
-) -> Result<Option<&'a str>, AmbiguousName> {
-    resolve(
-        name,
-        names.into_iter().map(|candidate| (candidate, candidate)),
-    )
-}
-
 fn find_item<'a>(
     pallet: &PalletMetadata<'a>,
     kind: PalletItemKind,

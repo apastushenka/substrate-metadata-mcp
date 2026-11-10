@@ -385,11 +385,11 @@ fn pallet_item_lookup_error_message(error: &PalletItemLookupError, version: u32)
     }
 }
 
-fn pallet_lookup_error_message(error: &PalletLookupError) -> String {
+pub(super) fn pallet_lookup_error_message(error: &PalletLookupError) -> String {
     match error {
         PalletLookupError::AmbiguousName(ambiguous) => ambiguous_name_message(ambiguous),
         PalletLookupError::IsRuntimeApi(runtime_api) => format!(
-            "`{runtime_api}` is a runtime API, not a pallet; `get_runtime_api_method` reads its methods"
+            "`{runtime_api}` is a runtime API, not a pallet; `list_runtime_api_methods` lists its methods and `get_runtime_api_method` reads one"
         ),
         PalletLookupError::UnknownPallet(name) => {
             format!("no pallet named `{name}`; `list_pallets` lists the valid names")

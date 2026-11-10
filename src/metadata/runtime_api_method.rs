@@ -105,7 +105,10 @@ fn runtime_api_method_lookup_error_message(
     }
 }
 
-fn runtime_api_lookup_error_message(error: &RuntimeApiLookupError, version: u32) -> String {
+pub(super) fn runtime_api_lookup_error_message(
+    error: &RuntimeApiLookupError,
+    version: u32,
+) -> String {
     // Metadata before v15 carries no runtime APIs at all, so whatever else the name missed,
     // that is why it was not found.
     if version < 15 {
@@ -115,7 +118,9 @@ fn runtime_api_lookup_error_message(error: &RuntimeApiLookupError, version: u32)
     match error {
         RuntimeApiLookupError::AmbiguousName(ambiguous) => ambiguous_name_message(ambiguous),
         RuntimeApiLookupError::IsPallet(pallet) => {
-            format!("`{pallet}` is a pallet, not a runtime API; `get_pallet_item` reads its items")
+            format!(
+                "`{pallet}` is a pallet, not a runtime API; `list_pallet_items` lists its items and `get_pallet_item` reads one"
+            )
         }
         RuntimeApiLookupError::UnknownRuntimeApi(name) => {
             format!("no runtime API named `{name}`; `list_runtime_apis` lists the valid names")
