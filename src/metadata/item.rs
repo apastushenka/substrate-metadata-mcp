@@ -7,6 +7,8 @@ use rmcp::schemars::{self, JsonSchema};
 use serde::{Deserialize, Serialize};
 use subxt_metadata::Metadata;
 
+use super::docs;
+
 /// A pallet, a runtime API, or an item inside one of them.
 ///
 /// `runtime_api` is a group of host-callable runtime methods; `runtime_api_method` is
@@ -108,7 +110,7 @@ impl Item {
             kind: item.kind,
             namespace: item.namespace.map(String::from),
             name: String::from(item.name),
-            summary: summary(item.docs),
+            summary: docs::summary(item.docs),
         }
     }
 }
@@ -219,33 +221,6 @@ pub fn for_each_item(metadata: &Metadata, mut visit: impl FnMut(ItemRef<'_>)) {
     }
 }
 
-const SUMMARY_CHARS: usize = 200;
-
-pub fn summary(docs: &[String]) -> Option<String> {
-    let line = docs
-        .iter()
-        .map(|line| line.trim())
-        .find(|line| !line.is_empty())?;
-
-    match line.char_indices().nth(SUMMARY_CHARS) {
-        Some((end, _)) => Some(format!("{}...", &line[..end])),
-        None => Some(String::from(line)),
-    }
-}
-
-/// FRAME stores the text after `///` as-is, so almost every line starts with a
-/// space. rustdoc strips exactly one; so do we. `trim_start` would also eat the
-/// indentation of code blocks. Empty lines stay: they separate paragraphs.
-pub fn docs(lines: &[String]) -> Vec<String> {
-    lines
-        .iter()
-        .map(|line| match line.strip_prefix(' ') {
-            Some(rest) => String::from(rest),
-            None => line.clone(),
-        })
-        .collect()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -266,48 +241,5 @@ mod tests {
             .collect();
 
         assert_eq!(listed, &ours);
-    }
-
-    #[test]
-    fn docs_strips_one_leading_space() {
-        let lines = [" Transfer funds.", "No leading space", "  indented", ""].map(String::from);
-
-        assert_eq!(
-            docs(&lines),
-            ["Transfer funds.", "No leading space", " indented", "",]
-        );
-    }
-
-    #[test]
-    fn summary_skips_blank_lines_and_trims() {
-        let docs = ["", "  ", "  Transfer funds.  "].map(String::from);
-
-        assert_eq!(summary(&docs).as_deref(), Some("Transfer funds."));
-    }
-
-    #[test]
-    fn summary_is_absent_without_text() {
-        assert_eq!(summary(&[]), None);
-        assert_eq!(summary(&["  ".into(), "\t".into()]), None);
-    }
-
-    #[test]
-    fn summary_keeps_line_at_limit_whole() {
-        let line = "a".repeat(SUMMARY_CHARS);
-
-        assert_eq!(
-            summary(core::slice::from_ref(&line)).as_deref(),
-            Some(line.as_str())
-        );
-    }
-
-    #[test]
-    fn summary_truncates_past_limit() {
-        let line = "я".repeat(SUMMARY_CHARS + 1);
-
-        assert_eq!(
-            summary(core::slice::from_ref(&line)),
-            Some(format!("{}...", "я".repeat(SUMMARY_CHARS)))
-        );
     }
 }

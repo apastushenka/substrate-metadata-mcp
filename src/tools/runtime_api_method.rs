@@ -3,10 +3,8 @@
 use rmcp::schemars::{self, JsonSchema};
 use serde::{Deserialize, Serialize};
 
-use super::{
-    MetadataSnapshot,
-    item::docs,
-    lookup,
+use crate::metadata::{
+    MetadataSnapshot, docs, lookup,
     registry::{Field, type_name},
 };
 
@@ -73,7 +71,7 @@ pub fn runtime_api_method(
     Ok(RuntimeApiMethodDetails {
         runtime_api: String::from(runtime_api.name()),
         name: String::from(method.name()),
-        docs: docs(method.docs()),
+        docs: docs::full(method.docs()),
         arguments,
         returns,
     })
