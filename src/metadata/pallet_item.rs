@@ -9,7 +9,7 @@ use subxt_metadata::{
 };
 
 use super::{
-    LoadedMetadata,
+    MetadataSnapshot,
     item::{PalletItemKind, docs},
     lookup::{self, PalletItem},
     registry::{Field, render_value, type_name},
@@ -200,12 +200,13 @@ impl From<StorageHasher> for Hasher {
 }
 
 pub fn pallet_item(
-    loaded: &LoadedMetadata,
+    snapshot: &MetadataSnapshot,
     address: &PalletItemAddress,
 ) -> anyhow::Result<PalletItemDetails> {
-    let (pallet, item) = lookup::pallet_item(loaded, &address.pallet, address.kind, &address.name)?;
+    let (pallet, item) =
+        lookup::pallet_item(snapshot, &address.pallet, address.kind, &address.name)?;
 
-    let types = loaded.metadata.types();
+    let types = snapshot.metadata.types();
 
     match item {
         PalletItem::Call(variant) => Ok(call_details(&pallet, variant, types)),

@@ -3,7 +3,7 @@
 use rmcp::schemars::{self, JsonSchema};
 use serde::Serialize;
 
-use super::{LoadedMetadata, item::summary};
+use super::{MetadataSnapshot, item::summary};
 
 // A struct rather than a bare `Vec`: MCP requires `structuredContent` to be an object.
 #[derive(Debug, Serialize, JsonSchema)]
@@ -28,8 +28,8 @@ pub struct RuntimeApiEntry {
     pub summary: Option<String>,
 }
 
-pub fn runtime_apis(loaded: &LoadedMetadata) -> RuntimeApiList {
-    let runtime_apis = loaded
+pub fn runtime_apis(snapshot: &MetadataSnapshot) -> RuntimeApiList {
+    let runtime_apis = snapshot
         .metadata
         .runtime_api_traits()
         .map(|api| RuntimeApiEntry {

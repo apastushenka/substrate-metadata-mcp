@@ -4,7 +4,7 @@ use rmcp::schemars::{self, JsonSchema};
 use serde::{Deserialize, Serialize};
 
 use super::{
-    LoadedMetadata,
+    MetadataSnapshot,
     item::{Item, ItemKind, for_each_item},
     lookup,
 };
@@ -26,13 +26,13 @@ pub struct RuntimeApiMethods {
 }
 
 pub fn runtime_api_methods(
-    loaded: &LoadedMetadata,
+    snapshot: &MetadataSnapshot,
     request: &RuntimeApiMethodsRequest,
 ) -> anyhow::Result<RuntimeApiMethods> {
-    let metadata = &loaded.metadata;
+    let metadata = &snapshot.metadata;
 
     // The filter below cannot tell "no methods" from "no such runtime API".
-    let runtime_api = lookup::runtime_api(loaded, &request.runtime_api)?.name();
+    let runtime_api = lookup::runtime_api(snapshot, &request.runtime_api)?.name();
 
     let mut methods = Vec::new();
 

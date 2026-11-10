@@ -10,7 +10,7 @@ use subxt_metadata::{
     StorageEntryMetadata, ViewFunctionMetadata,
 };
 
-use super::{LoadedMetadata, item::PalletItemKind};
+use super::{MetadataSnapshot, item::PalletItemKind};
 
 mod error;
 
@@ -43,10 +43,10 @@ impl<'a> PalletItem<'a> {
 /// The pallet called `name`. A miss also says whether a runtime API has that name, which tells
 /// a confused namespace from a typo.
 pub fn pallet<'a>(
-    loaded: &'a LoadedMetadata,
+    snapshot: &'a MetadataSnapshot,
     name: &str,
 ) -> Result<PalletMetadata<'a>, PalletLookupError> {
-    let metadata = &loaded.metadata;
+    let metadata = &snapshot.metadata;
     let pallets = metadata.pallets().map(|pallet| (pallet.name(), pallet));
 
     if let Some(pallet) = resolve(name, pallets)? {
@@ -68,7 +68,7 @@ pub fn pallet<'a>(
 /// its pallet is refused, not split. A miss lists the pallet's items of other kinds that have
 /// the name.
 pub fn pallet_item<'a>(
-    loaded: &'a LoadedMetadata,
+    snapshot: &'a MetadataSnapshot,
     pallet: &str,
     kind: PalletItemKind,
     name: &str,
@@ -79,7 +79,7 @@ pub fn pallet_item<'a>(
         return Err(PalletItemLookupError::QualifiedName(qualified));
     }
 
-    let pallet = self::pallet(loaded, pallet)?;
+    let pallet = self::pallet(snapshot, pallet)?;
 
     if let Some(item) = find_item(&pallet, kind, name)? {
         return Ok((pallet, item));
@@ -101,11 +101,11 @@ pub fn pallet_item<'a>(
 
     // Before v16 the metadata has no view functions at all, so whatever else the name missed,
     // that is why it was not found.
-    if candidates.is_empty() && kind == PalletItemKind::ViewFunction && loaded.version < 16 {
+    if candidates.is_empty() && kind == PalletItemKind::ViewFunction && snapshot.version < 16 {
         return Err(PalletItemLookupError::NoViewFunctions {
             pallet: String::from(pallet.name()),
             name: String::from(name),
-            version: loaded.version,
+            version: snapshot.version,
         });
     }
 
@@ -119,18 +119,18 @@ pub fn pallet_item<'a>(
 
 /// The runtime API called `name`. A miss also says whether a pallet has that name.
 pub fn runtime_api<'a>(
-    loaded: &'a LoadedMetadata,
+    snapshot: &'a MetadataSnapshot,
     name: &str,
 ) -> Result<RuntimeApiMetadata<'a>, RuntimeApiLookupError> {
     // Before v15 the metadata has no runtime APIs at all, so whatever else the name missed,
     // that is why it was not found.
-    if loaded.version < 15 {
+    if snapshot.version < 15 {
         return Err(RuntimeApiLookupError::NoRuntimeApis {
-            version: loaded.version,
+            version: snapshot.version,
         });
     }
 
-    let metadata = &loaded.metadata;
+    let metadata = &snapshot.metadata;
     let runtime_apis = metadata.runtime_api_traits().map(|api| (api.name(), api));
 
     if let Some(runtime_api) = resolve(name, runtime_apis)? {
@@ -151,7 +151,7 @@ pub fn runtime_api<'a>(
 /// The method called `name` in `runtime_api`, along with the runtime API. A `name` that carries
 /// its runtime API is refused, not split.
 pub fn runtime_api_method<'a>(
-    loaded: &'a LoadedMetadata,
+    snapshot: &'a MetadataSnapshot,
     runtime_api: &str,
     name: &str,
 ) -> Result<(RuntimeApiMetadata<'a>, RuntimeApiMethodMetadata<'a>), RuntimeApiMethodLookupError> {
@@ -160,7 +160,7 @@ pub fn runtime_api_method<'a>(
         return Err(RuntimeApiMethodLookupError::QualifiedName(qualified));
     }
 
-    let runtime_api = self::runtime_api(loaded, runtime_api)?;
+    let runtime_api = self::runtime_api(snapshot, runtime_api)?;
     let methods = runtime_api.methods().map(|method| (method.name(), method));
 
     match resolve(name, methods)? {

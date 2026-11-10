@@ -30,13 +30,13 @@ pub use self::{
 
 /// `Metadata` does not keep the version of the format it was decoded from, so [`load`]
 /// records it alongside.
-pub struct LoadedMetadata {
+pub struct MetadataSnapshot {
     pub metadata: Metadata,
     pub version: u32,
 }
 
 /// Fetch and decode the metadata.
-pub async fn load(url: &Url) -> anyhow::Result<LoadedMetadata> {
+pub async fn load(url: &Url) -> anyhow::Result<MetadataSnapshot> {
     // TODO: `Latest` takes the node's newest version, which a future v17 would make
     // undecodable here -- and indistinguishable from corrupt bytes, since both fail as
     // an unknown enum variant. Fall back to the newest of `SUPPORTED_METADATA_VERSIONS`.
@@ -51,5 +51,5 @@ pub async fn load(url: &Url) -> anyhow::Result<LoadedMetadata> {
     let metadata = Metadata::try_from(RuntimeMetadataPrefixed(META_RESERVED, runtime_metadata))
         .with_context(|| format!("failed to convert metadata v{version}"))?;
 
-    Ok(LoadedMetadata { metadata, version })
+    Ok(MetadataSnapshot { metadata, version })
 }

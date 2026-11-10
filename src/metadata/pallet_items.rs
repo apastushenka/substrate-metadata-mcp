@@ -4,7 +4,7 @@ use rmcp::schemars::{self, JsonSchema};
 use serde::{Deserialize, Serialize};
 
 use super::{
-    LoadedMetadata,
+    MetadataSnapshot,
     item::{Item, ItemRef, PalletItemKind, for_each_item},
     lookup,
 };
@@ -69,13 +69,13 @@ fn default_limit() -> usize {
 }
 
 pub fn pallet_items(
-    loaded: &LoadedMetadata,
+    snapshot: &MetadataSnapshot,
     request: &PalletItemsRequest,
 ) -> anyhow::Result<PalletItems> {
-    let metadata = &loaded.metadata;
+    let metadata = &snapshot.metadata;
 
     // The filter below cannot tell "no such items" from "no such pallet".
-    let pallet = lookup::pallet(loaded, &request.pallet)?.name();
+    let pallet = lookup::pallet(snapshot, &request.pallet)?.name();
 
     // Items cannot be kept past the visit (see `for_each_item`), so the page is cut on
     // the fly: count every match, keep only those inside the window.

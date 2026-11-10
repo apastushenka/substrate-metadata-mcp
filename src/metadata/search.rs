@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 
 use self::tokens::tokenize;
 use super::{
-    LoadedMetadata,
+    MetadataSnapshot,
     item::{Item, ItemKind, ItemRef, for_each_item},
 };
 
@@ -82,11 +82,14 @@ fn default_limit() -> usize {
     DEFAULT_LIMIT
 }
 
-pub fn search(loaded: &LoadedMetadata, request: &SearchRequest) -> anyhow::Result<SearchResults> {
+pub fn search(
+    snapshot: &MetadataSnapshot,
+    request: &SearchRequest,
+) -> anyhow::Result<SearchResults> {
     let mut scanner = Scanner::from_query(&request.query)?;
     let mut scored: Vec<(Rank, SearchHit)> = Vec::new();
 
-    for_each_item(&loaded.metadata, |item| {
+    for_each_item(&snapshot.metadata, |item| {
         // Before the kind filter, so `unmatched` is "nowhere in the metadata".
         let term_hits = scanner.scan(&item);
 
