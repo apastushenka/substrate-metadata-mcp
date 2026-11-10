@@ -1,13 +1,12 @@
 //! Listing the methods of one runtime API.
 
-use anyhow::anyhow;
 use rmcp::schemars::{self, JsonSchema};
 use serde::{Deserialize, Serialize};
 
 use super::{
     LoadedMetadata,
     item::{Item, ItemKind, for_each_item},
-    lookup::{self, runtime_api_lookup_error_message},
+    lookup,
 };
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -33,9 +32,7 @@ pub fn runtime_api_methods(
     let metadata = &loaded.metadata;
 
     // The filter below cannot tell "no methods" from "no such runtime API".
-    let runtime_api = lookup::runtime_api(metadata, &request.runtime_api)
-        .map_err(|error| anyhow!(runtime_api_lookup_error_message(&error, loaded.version)))?
-        .name();
+    let runtime_api = lookup::runtime_api(loaded, &request.runtime_api)?.name();
 
     let mut methods = Vec::new();
 

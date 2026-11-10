@@ -1,11 +1,18 @@
-//! What a failed lookup reports, and the words this server puts it in. The words name the
-//! tools a caller should turn to next, which only this server knows.
+//! What a failed lookup reports, and the words this server puts it in: each error's `Display`.
+//! The words name the tools a caller should turn to next, which only this server knows.
+
+use thiserror::Error;
 
 use crate::metadata::item::PalletItemKind;
 
+// A variant that wraps another error is `#[error(transparent)]`, never a bare `#[from]`:
+// `#[from]` alone makes the wrapped error a `source`, and the `{:#}` the server renders tool
+// errors with would then print its words twice.
+
 /// Several names match ignoring case, and none matches exactly. `name` is as the caller wrote
 /// it, `matches` as the metadata spells them.
-#[derive(Debug)]
+#[derive(Debug, Error)]
+#[error("`{name}` matches several names ignoring case: {}", .matches.join(", "))]
 pub struct AmbiguousName {
     pub name: String,
     pub matches: Vec<String>,
@@ -37,199 +44,126 @@ impl QualifiedName {
 }
 
 /// Why `pallet` found nothing.
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum PalletLookupError {
     /// The name matches several pallets, or several runtime APIs, ignoring case.
-    AmbiguousName(AmbiguousName),
+    #[error(transparent)]
+    AmbiguousName(#[from] AmbiguousName),
     /// No pallet has the name, but this runtime API does.
+    #[error(
+        "`{0}` is a runtime API, not a pallet; `list_runtime_api_methods` lists its methods and `get_runtime_api_method` reads one"
+    )]
     IsRuntimeApi(String),
     /// Neither a pallet nor a runtime API has the name, given as the caller wrote it.
+    #[error("no pallet named `{0}`; `list_pallets` lists the valid names")]
     UnknownPallet(String),
 }
 
-impl From<AmbiguousName> for PalletLookupError {
-    fn from(ambiguous: AmbiguousName) -> Self {
-        Self::AmbiguousName(ambiguous)
-    }
-}
-
 /// Why `pallet_item` found nothing.
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum PalletItemLookupError {
     /// The item's name came with its pallet.
+    #[error(
+        "`name` is the item's own name: pass `{}` as `pallet` and `{}` as `name`",
+        .0.qualifier,
+        .0.name
+    )]
     QualifiedName(QualifiedName),
     /// The name matches several items of this kind in the pallet, ignoring case.
-    AmbiguousName(AmbiguousName),
+    #[error(transparent)]
+    AmbiguousName(#[from] AmbiguousName),
     /// The pallet itself was not found.
-    Pallet(PalletLookupError),
+    #[error(transparent)]
+    Pallet(#[from] PalletLookupError),
     /// The pallet has no item of this kind by that name: `pallet` as the metadata spells it,
     /// `name` as the caller wrote it. `candidates` are the pallet's items of other kinds that
     /// do have the name: each its kind, and the name as the metadata spells it.
+    #[error("{}", unknown_item_message(.pallet, .kind, .name, .candidates))]
     UnknownItem {
         pallet: String,
         kind: PalletItemKind,
         name: String,
         candidates: Vec<(PalletItemKind, String)>,
     },
-}
-
-impl From<AmbiguousName> for PalletItemLookupError {
-    fn from(ambiguous: AmbiguousName) -> Self {
-        Self::AmbiguousName(ambiguous)
-    }
-}
-
-impl From<PalletLookupError> for PalletItemLookupError {
-    fn from(error: PalletLookupError) -> Self {
-        Self::Pallet(error)
-    }
+    /// A view function was asked for, and metadata before v16 has none in any pallet:
+    /// `pallet` as the metadata spells it, `name` as the caller wrote it, `version` the
+    /// metadata's.
+    #[error(
+        "no `view_function` named `{name}` in pallet `{pallet}`; view functions need metadata v16; this metadata is v{version}, so no pallet has any"
+    )]
+    NoViewFunctions {
+        pallet: String,
+        name: String,
+        version: u32,
+    },
 }
 
 /// Why `runtime_api` found nothing.
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum RuntimeApiLookupError {
     /// The name matches several runtime APIs, or several pallets, ignoring case.
-    AmbiguousName(AmbiguousName),
+    #[error(transparent)]
+    AmbiguousName(#[from] AmbiguousName),
     /// No runtime API has the name, but this pallet does.
+    #[error(
+        "`{0}` is a pallet, not a runtime API; `list_pallet_items` lists its items and `get_pallet_item` reads one"
+    )]
     IsPallet(String),
     /// Neither a runtime API nor a pallet has the name, given as the caller wrote it.
+    #[error("no runtime API named `{0}`; `list_runtime_apis` lists the valid names")]
     UnknownRuntimeApi(String),
-}
-
-impl From<AmbiguousName> for RuntimeApiLookupError {
-    fn from(ambiguous: AmbiguousName) -> Self {
-        Self::AmbiguousName(ambiguous)
-    }
+    /// Metadata before v15 has no runtime APIs at all; `version` is the metadata's.
+    #[error("runtime APIs need metadata v15; this metadata is v{version}")]
+    NoRuntimeApis { version: u32 },
 }
 
 /// Why `runtime_api_method` found nothing.
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum RuntimeApiMethodLookupError {
     /// The method's name came with its runtime API.
+    #[error(
+        "`name` is the method's own name: pass `{}` as `runtime_api` and `{}` as `name`",
+        .0.qualifier,
+        .0.name
+    )]
     QualifiedName(QualifiedName),
     /// The name matches several methods of the runtime API, ignoring case.
-    AmbiguousName(AmbiguousName),
+    #[error(transparent)]
+    AmbiguousName(#[from] AmbiguousName),
     /// The runtime API itself was not found.
-    RuntimeApi(RuntimeApiLookupError),
+    #[error(transparent)]
+    RuntimeApi(#[from] RuntimeApiLookupError),
     /// The runtime API has no method by that name: `runtime_api` as the metadata spells it,
     /// `name` as the caller wrote it.
+    #[error(
+        "no method named `{name}` in runtime API `{runtime_api}`; `list_runtime_api_methods` lists them"
+    )]
     UnknownMethod { runtime_api: String, name: String },
-}
-
-impl From<AmbiguousName> for RuntimeApiMethodLookupError {
-    fn from(ambiguous: AmbiguousName) -> Self {
-        Self::AmbiguousName(ambiguous)
-    }
-}
-
-impl From<RuntimeApiLookupError> for RuntimeApiMethodLookupError {
-    fn from(error: RuntimeApiLookupError) -> Self {
-        Self::RuntimeApi(error)
-    }
-}
-
-pub fn pallet_lookup_error_message(error: &PalletLookupError) -> String {
-    match error {
-        PalletLookupError::AmbiguousName(ambiguous) => ambiguous_name_message(ambiguous),
-        PalletLookupError::IsRuntimeApi(runtime_api) => format!(
-            "`{runtime_api}` is a runtime API, not a pallet; `list_runtime_api_methods` lists its methods and `get_runtime_api_method` reads one"
-        ),
-        PalletLookupError::UnknownPallet(name) => {
-            format!("no pallet named `{name}`; `list_pallets` lists the valid names")
-        }
-    }
-}
-
-pub fn pallet_item_lookup_error_message(error: &PalletItemLookupError, version: u32) -> String {
-    match error {
-        PalletItemLookupError::QualifiedName(QualifiedName { qualifier, name }) => format!(
-            "`name` is the item's own name: pass `{qualifier}` as `pallet` and `{name}` as `name`"
-        ),
-        PalletItemLookupError::AmbiguousName(ambiguous) => ambiguous_name_message(ambiguous),
-        PalletItemLookupError::Pallet(error) => pallet_lookup_error_message(error),
-        PalletItemLookupError::UnknownItem {
-            pallet,
-            kind,
-            name,
-            candidates,
-        } => unknown_item_message(pallet, *kind, name, candidates, version),
-    }
-}
-
-pub fn runtime_api_lookup_error_message(error: &RuntimeApiLookupError, version: u32) -> String {
-    // Metadata before v15 carries no runtime APIs at all, so whatever else the name missed,
-    // that is why it was not found.
-    if version < 15 {
-        return format!("runtime APIs need metadata v15; this metadata is v{version}");
-    }
-
-    match error {
-        RuntimeApiLookupError::AmbiguousName(ambiguous) => ambiguous_name_message(ambiguous),
-        RuntimeApiLookupError::IsPallet(pallet) => {
-            format!(
-                "`{pallet}` is a pallet, not a runtime API; `list_pallet_items` lists its items and `get_pallet_item` reads one"
-            )
-        }
-        RuntimeApiLookupError::UnknownRuntimeApi(name) => {
-            format!("no runtime API named `{name}`; `list_runtime_apis` lists the valid names")
-        }
-    }
-}
-
-pub fn runtime_api_method_lookup_error_message(
-    error: &RuntimeApiMethodLookupError,
-    version: u32,
-) -> String {
-    match error {
-        RuntimeApiMethodLookupError::QualifiedName(QualifiedName { qualifier, name }) => format!(
-            "`name` is the method's own name: pass `{qualifier}` as `runtime_api` and `{name}` as `name`"
-        ),
-        RuntimeApiMethodLookupError::AmbiguousName(ambiguous) => ambiguous_name_message(ambiguous),
-        RuntimeApiMethodLookupError::RuntimeApi(error) => {
-            runtime_api_lookup_error_message(error, version)
-        }
-        RuntimeApiMethodLookupError::UnknownMethod { runtime_api, name } => format!(
-            "no method named `{name}` in runtime API `{runtime_api}`; `list_runtime_api_methods` lists them"
-        ),
-    }
-}
-
-fn ambiguous_name_message(ambiguous: &AmbiguousName) -> String {
-    format!(
-        "`{}` matches several names ignoring case: {}",
-        ambiguous.name,
-        ambiguous.matches.join(", ")
-    )
 }
 
 fn unknown_item_message(
     pallet: &str,
-    kind: PalletItemKind,
+    kind: &PalletItemKind,
     name: &str,
     candidates: &[(PalletItemKind, String)],
-    version: u32,
 ) -> String {
-    let kind_name = kind.as_str();
+    let kind = kind.as_str();
 
-    if !candidates.is_empty() {
-        // The metadata's spelling, not the request's: this is the string the caller
-        // will copy into the retry, and `name` below is whatever they typed.
-        let candidates = candidates
-            .iter()
-            .map(|(kind, actual)| format!("`{}` has `{actual}`", kind.as_str()))
-            .collect::<Vec<_>>()
-            .join(", ");
-
-        return format!("no `{kind_name}` named `{name}` in pallet `{pallet}`, but {candidates}");
-    }
-
-    if kind == PalletItemKind::ViewFunction && version < 16 {
+    if candidates.is_empty() {
         return format!(
-            "no `{kind_name}` named `{name}` in pallet `{pallet}`; view functions need metadata v16; this metadata is v{version}, so no pallet has any"
+            "no `{kind}` named `{name}` in pallet `{pallet}`; `list_pallet_items` lists them"
         );
     }
 
-    format!("no `{kind_name}` named `{name}` in pallet `{pallet}`; `list_pallet_items` lists them")
+    // The metadata's spelling, not the request's: this is the string the caller will copy
+    // into the retry, and `name` above is whatever they typed.
+    let candidates = candidates
+        .iter()
+        .map(|(kind, actual)| format!("`{}` has `{actual}`", kind.as_str()))
+        .collect::<Vec<_>>()
+        .join(", ");
+
+    format!("no `{kind}` named `{name}` in pallet `{pallet}`, but {candidates}")
 }
 
 #[cfg(test)]
@@ -281,74 +215,102 @@ mod tests {
         assert_eq!(QualifiedName::parse("::version"), None);
     }
 
+    // The server renders a tool error with `{:#}`, which follows the `source` chain: a wrapped
+    // error must come out once, as its own words.
     #[test]
-    fn runtime_api_lookup_error_message_blames_the_version_before_v15() {
+    fn wrapped_error_is_worded_once() {
+        let error = PalletItemLookupError::Pallet(PalletLookupError::UnknownPallet(String::from(
+            "Staking",
+        )));
+
         assert_eq!(
-            runtime_api_lookup_error_message(
-                &RuntimeApiLookupError::IsPallet(String::from("Balances")),
-                14
-            ),
-            "runtime APIs need metadata v15; this metadata is v14"
+            format!("{:#}", anyhow::Error::from(error)),
+            "no pallet named `Staking`; `list_pallets` lists the valid names"
         );
     }
 
     #[test]
-    fn ambiguous_name_message_lists_the_matches() {
+    fn ambiguous_name_lists_the_matches() {
         let ambiguous = AmbiguousName {
             name: String::from("BALANCES"),
             matches: vec![String::from("balances"), String::from("Balances")],
         };
 
         assert_eq!(
-            ambiguous_name_message(&ambiguous),
+            ambiguous.to_string(),
             "`BALANCES` matches several names ignoring case: balances, Balances"
         );
     }
 
     #[test]
-    fn unknown_item_message_names_the_other_kind() {
+    fn unknown_item_names_the_other_kind() {
+        let error = PalletItemLookupError::UnknownItem {
+            pallet: String::from("Balances"),
+            kind: PalletItemKind::Call,
+            name: String::from("ExistentialDeposit"),
+            candidates: vec![(PalletItemKind::Constant, String::from("ExistentialDeposit"))],
+        };
+
         assert_eq!(
-            unknown_item_message(
-                "Balances",
-                PalletItemKind::Call,
-                "ExistentialDeposit",
-                &[(PalletItemKind::Constant, String::from("ExistentialDeposit"))],
-                16
-            ),
+            error.to_string(),
             "no `call` named `ExistentialDeposit` in pallet `Balances`, but `constant` has `ExistentialDeposit`"
         );
     }
 
     #[test]
-    fn unknown_item_message_lists_several_other_kinds() {
+    fn unknown_item_lists_several_other_kinds() {
+        let error = PalletItemLookupError::UnknownItem {
+            pallet: String::from("System"),
+            kind: PalletItemKind::Call,
+            name: String::from("account"),
+            candidates: vec![
+                (PalletItemKind::Storage, String::from("Account")),
+                (PalletItemKind::Event, String::from("Account")),
+            ],
+        };
+
         assert_eq!(
-            unknown_item_message(
-                "System",
-                PalletItemKind::Call,
-                "account",
-                &[
-                    (PalletItemKind::Storage, String::from("Account")),
-                    (PalletItemKind::Event, String::from("Account"))
-                ],
-                16
-            ),
+            error.to_string(),
             "no `call` named `account` in pallet `System`, but `storage` has `Account`, `event` has `Account`"
         );
     }
 
     #[test]
-    fn unknown_item_message_points_at_the_version_not_the_listing_before_v16() {
+    fn unknown_item_without_candidates_points_at_the_listing() {
+        let error = PalletItemLookupError::UnknownItem {
+            pallet: String::from("Balances"),
+            kind: PalletItemKind::ViewFunction,
+            name: String::from("get"),
+            candidates: Vec::new(),
+        };
+
         assert_eq!(
-            unknown_item_message("Balances", PalletItemKind::ViewFunction, "get", &[], 15),
+            error.to_string(),
+            "no `view_function` named `get` in pallet `Balances`; `list_pallet_items` lists them"
+        );
+    }
+
+    #[test]
+    fn no_view_functions_points_at_the_version_not_the_listing() {
+        let error = PalletItemLookupError::NoViewFunctions {
+            pallet: String::from("Balances"),
+            name: String::from("get"),
+            version: 15,
+        };
+
+        assert_eq!(
+            error.to_string(),
             "no `view_function` named `get` in pallet `Balances`; view functions need metadata v16; this metadata is v15, so no pallet has any"
         );
     }
 
     #[test]
-    fn unknown_item_message_does_not_note_the_view_function_version_on_v16() {
+    fn no_runtime_apis_points_at_the_version() {
+        let error = RuntimeApiLookupError::NoRuntimeApis { version: 14 };
+
         assert_eq!(
-            unknown_item_message("Balances", PalletItemKind::ViewFunction, "get", &[], 16),
-            "no `view_function` named `get` in pallet `Balances`; `list_pallet_items` lists them"
+            error.to_string(),
+            "runtime APIs need metadata v15; this metadata is v14"
         );
     }
 }

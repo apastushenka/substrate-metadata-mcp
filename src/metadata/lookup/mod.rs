@@ -1,27 +1,22 @@
 //! Finding pallets, runtime APIs and their items by the names a caller gives.
 //!
 //! A name is found as the metadata spells it, or ignoring case when that picks out a single
-//! name. A miss comes back as data: `error` defines it, together with the words this server
-//! puts it in. The `*LookupError` types implement neither `Display` nor `std::error::Error`,
-//! so `?` cannot pass a miss on before it has been worded.
+//! name. A miss comes back as an error defined in `error`, whose `Display` is this server's
+//! wording of it, so a tool passes it on with `?`.
 
 use scale_info::{Variant, form::PortableForm};
 use subxt_metadata::{
-    ConstantMetadata, Metadata, PalletMetadata, RuntimeApiMetadata, RuntimeApiMethodMetadata,
+    ConstantMetadata, PalletMetadata, RuntimeApiMetadata, RuntimeApiMethodMetadata,
     StorageEntryMetadata, ViewFunctionMetadata,
 };
 
-use super::item::PalletItemKind;
+use super::{LoadedMetadata, item::PalletItemKind};
 
 mod error;
 
 use self::error::{
     AmbiguousName, PalletItemLookupError, PalletLookupError, QualifiedName, RuntimeApiLookupError,
     RuntimeApiMethodLookupError,
-};
-pub use self::error::{
-    pallet_item_lookup_error_message, pallet_lookup_error_message,
-    runtime_api_lookup_error_message, runtime_api_method_lookup_error_message,
 };
 
 /// An item found in a pallet, one variant per kind.
@@ -48,9 +43,10 @@ impl<'a> PalletItem<'a> {
 /// The pallet called `name`. A miss also says whether a runtime API has that name, which tells
 /// a confused namespace from a typo.
 pub fn pallet<'a>(
-    metadata: &'a Metadata,
+    loaded: &'a LoadedMetadata,
     name: &str,
 ) -> Result<PalletMetadata<'a>, PalletLookupError> {
+    let metadata = &loaded.metadata;
     let pallets = metadata.pallets().map(|pallet| (pallet.name(), pallet));
 
     if let Some(pallet) = resolve(name, pallets)? {
@@ -72,7 +68,7 @@ pub fn pallet<'a>(
 /// its pallet is refused, not split. A miss lists the pallet's items of other kinds that have
 /// the name.
 pub fn pallet_item<'a>(
-    metadata: &'a Metadata,
+    loaded: &'a LoadedMetadata,
     pallet: &str,
     kind: PalletItemKind,
     name: &str,
@@ -83,7 +79,7 @@ pub fn pallet_item<'a>(
         return Err(PalletItemLookupError::QualifiedName(qualified));
     }
 
-    let pallet = self::pallet(metadata, pallet)?;
+    let pallet = self::pallet(loaded, pallet)?;
 
     if let Some(item) = find_item(&pallet, kind, name)? {
         return Ok((pallet, item));
@@ -103,6 +99,16 @@ pub fn pallet_item<'a>(
         }
     }
 
+    // Before v16 the metadata has no view functions at all, so whatever else the name missed,
+    // that is why it was not found.
+    if candidates.is_empty() && kind == PalletItemKind::ViewFunction && loaded.version < 16 {
+        return Err(PalletItemLookupError::NoViewFunctions {
+            pallet: String::from(pallet.name()),
+            name: String::from(name),
+            version: loaded.version,
+        });
+    }
+
     Err(PalletItemLookupError::UnknownItem {
         pallet: String::from(pallet.name()),
         kind,
@@ -113,9 +119,18 @@ pub fn pallet_item<'a>(
 
 /// The runtime API called `name`. A miss also says whether a pallet has that name.
 pub fn runtime_api<'a>(
-    metadata: &'a Metadata,
+    loaded: &'a LoadedMetadata,
     name: &str,
 ) -> Result<RuntimeApiMetadata<'a>, RuntimeApiLookupError> {
+    // Before v15 the metadata has no runtime APIs at all, so whatever else the name missed,
+    // that is why it was not found.
+    if loaded.version < 15 {
+        return Err(RuntimeApiLookupError::NoRuntimeApis {
+            version: loaded.version,
+        });
+    }
+
+    let metadata = &loaded.metadata;
     let runtime_apis = metadata.runtime_api_traits().map(|api| (api.name(), api));
 
     if let Some(runtime_api) = resolve(name, runtime_apis)? {
@@ -136,7 +151,7 @@ pub fn runtime_api<'a>(
 /// The method called `name` in `runtime_api`, along with the runtime API. A `name` that carries
 /// its runtime API is refused, not split.
 pub fn runtime_api_method<'a>(
-    metadata: &'a Metadata,
+    loaded: &'a LoadedMetadata,
     runtime_api: &str,
     name: &str,
 ) -> Result<(RuntimeApiMetadata<'a>, RuntimeApiMethodMetadata<'a>), RuntimeApiMethodLookupError> {
@@ -145,7 +160,7 @@ pub fn runtime_api_method<'a>(
         return Err(RuntimeApiMethodLookupError::QualifiedName(qualified));
     }
 
-    let runtime_api = self::runtime_api(metadata, runtime_api)?;
+    let runtime_api = self::runtime_api(loaded, runtime_api)?;
     let methods = runtime_api.methods().map(|method| (method.name(), method));
 
     match resolve(name, methods)? {

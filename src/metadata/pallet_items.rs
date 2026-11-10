@@ -1,13 +1,12 @@
 //! Listing everything one pallet contains.
 
-use anyhow::anyhow;
 use rmcp::schemars::{self, JsonSchema};
 use serde::{Deserialize, Serialize};
 
 use super::{
     LoadedMetadata,
     item::{Item, ItemRef, PalletItemKind, for_each_item},
-    lookup::{self, pallet_lookup_error_message},
+    lookup,
 };
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -76,9 +75,7 @@ pub fn pallet_items(
     let metadata = &loaded.metadata;
 
     // The filter below cannot tell "no such items" from "no such pallet".
-    let pallet = lookup::pallet(metadata, &request.pallet)
-        .map_err(|error| anyhow!(pallet_lookup_error_message(&error)))?
-        .name();
+    let pallet = lookup::pallet(loaded, &request.pallet)?.name();
 
     // Items cannot be kept past the visit (see `for_each_item`), so the page is cut on
     // the fly: count every match, keep only those inside the window.

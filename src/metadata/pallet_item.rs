@@ -1,6 +1,6 @@
 //! Reading one item of a pallet.
 
-use anyhow::{Context, anyhow};
+use anyhow::Context;
 use rmcp::schemars::{self, JsonSchema};
 use scale_info::{PortableRegistry, Variant, form::PortableForm};
 use serde::{Deserialize, Serialize};
@@ -11,7 +11,7 @@ use subxt_metadata::{
 use super::{
     LoadedMetadata,
     item::{PalletItemKind, docs},
-    lookup::{self, PalletItem, pallet_item_lookup_error_message},
+    lookup::{self, PalletItem},
     registry::{Field, render_value, type_name},
 };
 
@@ -203,13 +203,7 @@ pub fn pallet_item(
     loaded: &LoadedMetadata,
     address: &PalletItemAddress,
 ) -> anyhow::Result<PalletItemDetails> {
-    let (pallet, item) = lookup::pallet_item(
-        &loaded.metadata,
-        &address.pallet,
-        address.kind,
-        &address.name,
-    )
-    .map_err(|error| anyhow!(pallet_item_lookup_error_message(&error, loaded.version)))?;
+    let (pallet, item) = lookup::pallet_item(loaded, &address.pallet, address.kind, &address.name)?;
 
     let types = loaded.metadata.types();
 

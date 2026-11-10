@@ -1,13 +1,12 @@
 //! Reading one method of a runtime API.
 
-use anyhow::anyhow;
 use rmcp::schemars::{self, JsonSchema};
 use serde::{Deserialize, Serialize};
 
 use super::{
     LoadedMetadata,
     item::docs,
-    lookup::{self, runtime_api_method_lookup_error_message},
+    lookup,
     registry::{Field, type_name},
 };
 
@@ -60,14 +59,7 @@ pub fn runtime_api_method(
     address: &RuntimeApiMethodAddress,
 ) -> anyhow::Result<RuntimeApiMethodDetails> {
     let (runtime_api, method) =
-        lookup::runtime_api_method(&loaded.metadata, &address.runtime_api, &address.name).map_err(
-            |error| {
-                anyhow!(runtime_api_method_lookup_error_message(
-                    &error,
-                    loaded.version
-                ))
-            },
-        )?;
+        lookup::runtime_api_method(loaded, &address.runtime_api, &address.name)?;
 
     let types = loaded.metadata.types();
 
