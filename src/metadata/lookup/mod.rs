@@ -16,7 +16,7 @@ mod error;
 
 use self::error::{
     AmbiguousName, PalletItemLookupError, PalletLookupError, QualifiedName, RuntimeApiLookupError,
-    RuntimeApiMethodLookupError,
+    RuntimeApiMethodLookupError, UnknownItem,
 };
 
 /// An item found in a pallet, one variant per kind.
@@ -109,12 +109,12 @@ pub fn pallet_item<'a>(
         });
     }
 
-    Err(PalletItemLookupError::UnknownItem {
+    Err(PalletItemLookupError::UnknownItem(UnknownItem {
         pallet: String::from(pallet.name()),
         kind,
         name: String::from(name),
         candidates,
-    })
+    }))
 }
 
 /// The runtime API called `name`. A miss also says whether a pallet has that name.

@@ -1,6 +1,8 @@
 //! What a failed lookup reports, and the words this server puts it in: each error's `Display`.
 //! The words name the tools a caller should turn to next, which only this server knows.
 
+use core::fmt;
+
 use thiserror::Error;
 
 use crate::metadata::item::PalletItemKind;
@@ -59,6 +61,46 @@ pub enum PalletLookupError {
     UnknownPallet(String),
 }
 
+/// The pallet has no item of this kind by that name: `pallet` as the metadata spells it, `name`
+/// as the caller wrote it. `candidates` are the pallet's items of other kinds that do have the
+/// name: each its kind, and the name as the metadata spells it.
+#[derive(Debug, Error)]
+pub struct UnknownItem {
+    pub pallet: String,
+    pub kind: PalletItemKind,
+    pub name: String,
+    pub candidates: Vec<(PalletItemKind, String)>,
+}
+
+impl fmt::Display for UnknownItem {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let Self {
+            pallet,
+            kind,
+            name,
+            candidates,
+        } = self;
+        let kind = kind.as_str();
+
+        write!(f, "no `{kind}` named `{name}` in pallet `{pallet}`")?;
+
+        if candidates.is_empty() {
+            return f.write_str("; `list_pallet_items` lists them");
+        }
+
+        // The metadata's spelling, not the request's: this is the string the caller will copy
+        // into the retry, and `name` above is whatever they typed.
+        let mut separator = ", but";
+
+        for (kind, actual) in candidates {
+            write!(f, "{separator} `{}` has `{actual}`", kind.as_str())?;
+            separator = ",";
+        }
+
+        Ok(())
+    }
+}
+
 /// Why `pallet_item` found nothing.
 #[derive(Debug, Error)]
 pub enum PalletItemLookupError {
@@ -75,16 +117,9 @@ pub enum PalletItemLookupError {
     /// The pallet itself was not found.
     #[error(transparent)]
     Pallet(#[from] PalletLookupError),
-    /// The pallet has no item of this kind by that name: `pallet` as the metadata spells it,
-    /// `name` as the caller wrote it. `candidates` are the pallet's items of other kinds that
-    /// do have the name: each its kind, and the name as the metadata spells it.
-    #[error("{}", unknown_item_message(.pallet, .kind, .name, .candidates))]
-    UnknownItem {
-        pallet: String,
-        kind: PalletItemKind,
-        name: String,
-        candidates: Vec<(PalletItemKind, String)>,
-    },
+    /// The pallet has no item of this kind by that name.
+    #[error(transparent)]
+    UnknownItem(#[from] UnknownItem),
     /// A view function was asked for, and metadata before v16 has none in any pallet:
     /// `pallet` as the metadata spells it, `name` as the caller wrote it, `version` the
     /// metadata's.
@@ -139,31 +174,6 @@ pub enum RuntimeApiMethodLookupError {
         "no method named `{name}` in runtime API `{runtime_api}`; `list_runtime_api_methods` lists them"
     )]
     UnknownMethod { runtime_api: String, name: String },
-}
-
-fn unknown_item_message(
-    pallet: &str,
-    kind: &PalletItemKind,
-    name: &str,
-    candidates: &[(PalletItemKind, String)],
-) -> String {
-    let kind = kind.as_str();
-
-    if candidates.is_empty() {
-        return format!(
-            "no `{kind}` named `{name}` in pallet `{pallet}`; `list_pallet_items` lists them"
-        );
-    }
-
-    // The metadata's spelling, not the request's: this is the string the caller will copy
-    // into the retry, and `name` above is whatever they typed.
-    let candidates = candidates
-        .iter()
-        .map(|(kind, actual)| format!("`{}` has `{actual}`", kind.as_str()))
-        .collect::<Vec<_>>()
-        .join(", ");
-
-    format!("no `{kind}` named `{name}` in pallet `{pallet}`, but {candidates}")
 }
 
 #[cfg(test)]
@@ -244,7 +254,7 @@ mod tests {
 
     #[test]
     fn unknown_item_names_the_other_kind() {
-        let error = PalletItemLookupError::UnknownItem {
+        let error = UnknownItem {
             pallet: String::from("Balances"),
             kind: PalletItemKind::Call,
             name: String::from("ExistentialDeposit"),
@@ -259,7 +269,7 @@ mod tests {
 
     #[test]
     fn unknown_item_lists_several_other_kinds() {
-        let error = PalletItemLookupError::UnknownItem {
+        let error = UnknownItem {
             pallet: String::from("System"),
             kind: PalletItemKind::Call,
             name: String::from("account"),
@@ -277,7 +287,7 @@ mod tests {
 
     #[test]
     fn unknown_item_without_candidates_points_at_the_listing() {
-        let error = PalletItemLookupError::UnknownItem {
+        let error = UnknownItem {
             pallet: String::from("Balances"),
             kind: PalletItemKind::ViewFunction,
             name: String::from("get"),
