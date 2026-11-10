@@ -299,7 +299,7 @@ mod tokens {
     /// Word breaks, not substrings: `all` does not hit `allow` in
     /// `transfer_allow_death`, and a fragment of a pallet name does not select
     /// the pallet's children.
-    pub(super) fn tokenize(text: &str) -> impl Iterator<Item = &str> {
+    pub fn tokenize(text: &str) -> impl Iterator<Item = &str> {
         let mut rest = text;
 
         core::iter::from_fn(move || {
