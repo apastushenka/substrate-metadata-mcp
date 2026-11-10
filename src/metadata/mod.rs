@@ -1,6 +1,7 @@
 //! Fetching and decoding runtime metadata, and reading facts out of it.
 
 mod item;
+mod lookup;
 mod pallet_item;
 mod pallet_items;
 mod pallets;

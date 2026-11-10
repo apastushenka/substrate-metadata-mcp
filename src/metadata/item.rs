@@ -3,7 +3,6 @@
 //! Every tool that answers with an item answers with the same address -- `kind`,
 //! `namespace`, `name` -- so that a model can hand it on to another tool unchanged.
 
-use anyhow::bail;
 use rmcp::schemars::{self, JsonSchema};
 use serde::{Deserialize, Serialize};
 use subxt_metadata::Metadata;
@@ -220,42 +219,6 @@ pub fn for_each_item(metadata: &Metadata, mut visit: impl FnMut(ItemRef<'_>)) {
     }
 }
 
-/// Find `name` among `names`, ignoring case unless that is ambiguous, and return it as
-/// the metadata spells it.
-pub fn resolve_name<'a>(
-    name: &str,
-    names: impl Iterator<Item = &'a str>,
-) -> anyhow::Result<Option<&'a str>> {
-    let mut ignoring_case = Vec::new();
-
-    for candidate in names {
-        if candidate == name {
-            return Ok(Some(candidate));
-        }
-
-        if candidate.eq_ignore_ascii_case(name) {
-            ignoring_case.push(candidate);
-        }
-    }
-
-    match ignoring_case.as_slice() {
-        [] => Ok(None),
-        [actual] => Ok(Some(actual)),
-        several => bail!(
-            "`{name}` matches several names ignoring case: {}",
-            several.join(", ")
-        ),
-    }
-}
-
-/// `Balances::transfer_all` or `Core.version` written into one field. Both halves have
-/// to be there -- a name that only trails a separator is a typo, not an address.
-pub fn split_qualified_name(name: &str) -> Option<(&str, &str)> {
-    let (qualifier, item) = name.rsplit_once("::").or_else(|| name.rsplit_once('.'))?;
-
-    (!qualifier.is_empty() && !item.is_empty()).then_some((qualifier, item))
-}
-
 const SUMMARY_CHARS: usize = 200;
 
 pub fn summary(docs: &[String]) -> Option<String> {
@@ -287,53 +250,6 @@ pub fn docs(lines: &[String]) -> Vec<String> {
 mod tests {
     use super::*;
 
-    #[test]
-    fn resolve_name_returns_exact_name() {
-        let names = ["System", "Balances"];
-
-        assert_eq!(
-            resolve_name("Balances", names.into_iter()).unwrap(),
-            Some("Balances")
-        );
-    }
-
-    #[test]
-    fn resolve_name_forgives_case() {
-        let names = ["System", "Balances"];
-
-        assert_eq!(
-            resolve_name("balances", names.into_iter()).unwrap(),
-            Some("Balances")
-        );
-    }
-
-    #[test]
-    fn resolve_name_prefers_exact_name_over_case_variant() {
-        let names = ["balances", "Balances"];
-
-        assert_eq!(
-            resolve_name("Balances", names.into_iter()).unwrap(),
-            Some("Balances")
-        );
-    }
-
-    #[test]
-    fn resolve_name_finds_nothing_for_unknown_name() {
-        let names = ["System", "Balances"];
-
-        assert_eq!(resolve_name("Nonsense", names.into_iter()).unwrap(), None);
-    }
-
-    #[test]
-    fn resolve_name_rejects_ambiguous_case_variants() {
-        let err = resolve_name("BALANCES", ["balances", "Balances"].into_iter()).unwrap_err();
-
-        assert_eq!(
-            err.to_string(),
-            "`BALANCES` matches several names ignoring case: balances, Balances"
-        );
-    }
-
     // `as_str()` is a value a model will pass back as `kind`, so it has to be one the
     // request accepts and `PalletItemKind::ALL` has to list them all.
     #[test]
@@ -350,44 +266,6 @@ mod tests {
             .collect();
 
         assert_eq!(listed, &ours);
-    }
-
-    #[test]
-    fn split_qualified_name_splits_on_colons() {
-        assert_eq!(
-            split_qualified_name("Balances::transfer_all"),
-            Some(("Balances", "transfer_all"))
-        );
-        assert_eq!(
-            split_qualified_name("Core::version"),
-            Some(("Core", "version"))
-        );
-    }
-
-    #[test]
-    fn split_qualified_name_splits_on_dot() {
-        assert_eq!(
-            split_qualified_name("Balances.transfer"),
-            Some(("Balances", "transfer"))
-        );
-        assert_eq!(
-            split_qualified_name("Core.version"),
-            Some(("Core", "version"))
-        );
-    }
-
-    #[test]
-    fn split_qualified_name_leaves_plain_name_alone() {
-        assert_eq!(split_qualified_name("transfer_all"), None);
-        assert_eq!(split_qualified_name("version"), None);
-    }
-
-    #[test]
-    fn split_qualified_name_needs_both_halves() {
-        assert_eq!(split_qualified_name("transfer."), None);
-        assert_eq!(split_qualified_name("::transfer_all"), None);
-        assert_eq!(split_qualified_name("version."), None);
-        assert_eq!(split_qualified_name("::version"), None);
     }
 
     #[test]

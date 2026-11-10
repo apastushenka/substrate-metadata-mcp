@@ -1,12 +1,12 @@
 //! Listing the methods of one runtime API.
 
-use anyhow::Context;
 use rmcp::schemars::{self, JsonSchema};
 use serde::{Deserialize, Serialize};
 
 use super::{
     LoadedMetadata,
-    item::{Item, ItemKind, for_each_item, resolve_name},
+    item::{Item, ItemKind, for_each_item},
+    lookup,
 };
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -14,7 +14,8 @@ use super::{
 pub struct RuntimeApiMethodsRequest {
     /// The runtime API whose methods to list. `list_runtime_apis` lists the valid names;
     /// case is forgiven, `core` finds `Core`, and the response spells the name as the
-    /// metadata does. An unknown runtime API is an error.
+    /// metadata does. An unknown runtime API is an error. A pallet name is an error too:
+    /// this tool lists runtime API methods only.
     pub runtime_api: String,
 }
 
@@ -31,16 +32,7 @@ pub fn runtime_api_methods(
     let metadata = &loaded.metadata;
 
     // The filter below cannot tell "no methods" from "no such runtime API".
-    let runtime_api = resolve_name(
-        &request.runtime_api,
-        metadata.runtime_api_traits().map(|api| api.name()),
-    )?
-    .with_context(|| {
-        format!(
-            "no runtime API named `{}`; `list_runtime_apis` lists the valid names",
-            request.runtime_api
-        )
-    })?;
+    let runtime_api = lookup::runtime_api(loaded, &request.runtime_api)?.name();
 
     let mut methods = Vec::new();
 

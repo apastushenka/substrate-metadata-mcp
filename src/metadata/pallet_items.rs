@@ -1,12 +1,12 @@
 //! Listing everything one pallet contains.
 
-use anyhow::Context;
 use rmcp::schemars::{self, JsonSchema};
 use serde::{Deserialize, Serialize};
 
 use super::{
     LoadedMetadata,
-    item::{Item, ItemRef, PalletItemKind, for_each_item, resolve_name},
+    item::{Item, ItemRef, PalletItemKind, for_each_item},
+    lookup,
 };
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -15,7 +15,8 @@ pub struct PalletItemsRequest {
     /// The pallet whose items to list. `list_pallets` lists the valid names; case is
     /// forgiven, `balances` finds `Balances`, and the response spells the name as the
     /// metadata does. An unknown pallet is an error, so an empty result means the
-    /// pallet exists and has no items of the requested kinds.
+    /// pallet exists and has no items of the requested kinds. A runtime API name is an
+    /// error too: this tool lists pallet items only.
     pub pallet: String,
 
     /// Restrict the listing to these kinds of item. Empty means all of them.
@@ -74,16 +75,7 @@ pub fn pallet_items(
     let metadata = &loaded.metadata;
 
     // The filter below cannot tell "no such items" from "no such pallet".
-    let pallet = resolve_name(
-        &request.pallet,
-        metadata.pallets().map(|pallet| pallet.name()),
-    )?
-    .with_context(|| {
-        format!(
-            "no pallet named `{}`; `list_pallets` lists the valid names",
-            request.pallet
-        )
-    })?;
+    let pallet = lookup::pallet(loaded, &request.pallet)?.name();
 
     // Items cannot be kept past the visit (see `for_each_item`), so the page is cut on
     // the fly: count every match, keep only those inside the window.
