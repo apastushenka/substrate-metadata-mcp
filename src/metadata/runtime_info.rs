@@ -7,7 +7,7 @@ use scale_decode::{DecodeAsType, IntoVisitor};
 use serde::Serialize;
 use subxt_metadata::Metadata;
 
-use super::LoadedMetadata;
+use super::MetadataSnapshot;
 
 /// The `System` pallet and the constants read from it.
 mod system {
@@ -47,8 +47,8 @@ struct RuntimeVersion {
     transaction_version: u32,
 }
 
-pub fn runtime_info(loaded: &LoadedMetadata) -> anyhow::Result<RuntimeInfo> {
-    let metadata = &loaded.metadata;
+pub fn runtime_info(snapshot: &MetadataSnapshot) -> anyhow::Result<RuntimeInfo> {
+    let metadata = &snapshot.metadata;
 
     let version: RuntimeVersion = decode_constant(
         system::PALLET,
@@ -60,7 +60,7 @@ pub fn runtime_info(loaded: &LoadedMetadata) -> anyhow::Result<RuntimeInfo> {
     .context("failed to read the runtime version")?;
 
     Ok(RuntimeInfo {
-        metadata_version: loaded.version,
+        metadata_version: snapshot.version,
         spec_name: version.spec_name,
         spec_version: version.spec_version,
         transaction_version: version.transaction_version,

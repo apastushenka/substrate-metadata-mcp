@@ -12,7 +12,7 @@ use subxt_utils_fetchmetadata::Url;
 use tokio::sync::OnceCell;
 
 use crate::metadata::{
-    self, LoadedMetadata, PalletItemAddress, PalletItemDetails, PalletItems, PalletItemsRequest,
+    self, MetadataSnapshot, PalletItemAddress, PalletItemDetails, PalletItems, PalletItemsRequest,
     PalletList, RuntimeApiList, RuntimeApiMethodAddress, RuntimeApiMethodDetails,
     RuntimeApiMethods, RuntimeApiMethodsRequest, RuntimeInfo, SearchRequest, SearchResults,
 };
@@ -20,7 +20,7 @@ use crate::metadata::{
 #[derive(Clone)]
 pub struct MetadataServer {
     url: Url,
-    metadata: Arc<OnceCell<LoadedMetadata>>,
+    metadata: Arc<OnceCell<MetadataSnapshot>>,
 }
 
 // Every tool declares `read_only_hint` true and `open_world_hint` false. The server does
@@ -38,10 +38,10 @@ impl MetadataServer {
     }
 
     /// The metadata, fetched on first use.
-    pub async fn metadata(&self) -> anyhow::Result<&LoadedMetadata> {
+    pub async fn metadata(&self) -> anyhow::Result<&MetadataSnapshot> {
         self.metadata
             .get_or_try_init(|| async {
-                let loaded = metadata::load(&self.url).await?;
+                let snapshot = metadata::load(&self.url).await?;
 
                 eprintln!(
                     "{}: loaded metadata from {}",
@@ -49,7 +49,7 @@ impl MetadataServer {
                     self.url
                 );
 
-                anyhow::Ok(loaded)
+                anyhow::Ok(snapshot)
             })
             .await
     }
@@ -67,9 +67,11 @@ impl MetadataServer {
     /// metadata was fetched from, not the live state of the chain.
     #[tool(annotations(read_only_hint = true, open_world_hint = false))]
     async fn get_runtime_info(&self) -> Result<Json<RuntimeInfo>, String> {
-        let loaded = self.metadata().await.map_err(tool_error)?;
+        let snapshot = self.metadata().await.map_err(tool_error)?;
 
-        metadata::runtime_info(loaded).map(Json).map_err(tool_error)
+        metadata::runtime_info(snapshot)
+            .map(Json)
+            .map_err(tool_error)
     }
 
     /// List every pallet of the runtime, never truncated. Almost everything a runtime does
@@ -86,9 +88,9 @@ impl MetadataServer {
     /// maps that byte back to a name, so look it up in this listing.
     #[tool(annotations(read_only_hint = true, open_world_hint = false))]
     async fn list_pallets(&self) -> Result<Json<PalletList>, String> {
-        let loaded = self.metadata().await.map_err(tool_error)?;
+        let snapshot = self.metadata().await.map_err(tool_error)?;
 
-        Ok(Json(metadata::pallets(loaded)))
+        Ok(Json(metadata::pallets(snapshot)))
     }
 
     /// List every runtime API of the runtime, never truncated. Each one is a group of
@@ -99,9 +101,9 @@ impl MetadataServer {
     /// The list is empty under metadata v14, which carries no runtime APIs at all.
     #[tool(annotations(read_only_hint = true, open_world_hint = false))]
     async fn list_runtime_apis(&self) -> Result<Json<RuntimeApiList>, String> {
-        let loaded = self.metadata().await.map_err(tool_error)?;
+        let snapshot = self.metadata().await.map_err(tool_error)?;
 
-        Ok(Json(metadata::runtime_apis(loaded)))
+        Ok(Json(metadata::runtime_apis(snapshot)))
     }
 
     /// List what one pallet contains, paged and never truncated. `search` ranks and
@@ -119,9 +121,9 @@ impl MetadataServer {
         &self,
         Parameters(request): Parameters<PalletItemsRequest>,
     ) -> Result<Json<PalletItems>, String> {
-        let loaded = self.metadata().await.map_err(tool_error)?;
+        let snapshot = self.metadata().await.map_err(tool_error)?;
 
-        metadata::pallet_items(loaded, &request)
+        metadata::pallet_items(snapshot, &request)
             .map(Json)
             .map_err(tool_error)
     }
@@ -134,9 +136,9 @@ impl MetadataServer {
         &self,
         Parameters(request): Parameters<RuntimeApiMethodsRequest>,
     ) -> Result<Json<RuntimeApiMethods>, String> {
-        let loaded = self.metadata().await.map_err(tool_error)?;
+        let snapshot = self.metadata().await.map_err(tool_error)?;
 
-        metadata::runtime_api_methods(loaded, &request)
+        metadata::runtime_api_methods(snapshot, &request)
             .map(Json)
             .map_err(tool_error)
     }
@@ -149,9 +151,9 @@ impl MetadataServer {
         &self,
         Parameters(address): Parameters<RuntimeApiMethodAddress>,
     ) -> Result<Json<RuntimeApiMethodDetails>, String> {
-        let loaded = self.metadata().await.map_err(tool_error)?;
+        let snapshot = self.metadata().await.map_err(tool_error)?;
 
-        metadata::runtime_api_method(loaded, &address)
+        metadata::runtime_api_method(snapshot, &address)
             .map(Json)
             .map_err(tool_error)
     }
@@ -180,9 +182,9 @@ impl MetadataServer {
         &self,
         Parameters(address): Parameters<PalletItemAddress>,
     ) -> Result<Json<PalletItemDetails>, String> {
-        let loaded = self.metadata().await.map_err(tool_error)?;
+        let snapshot = self.metadata().await.map_err(tool_error)?;
 
-        metadata::pallet_item(loaded, &address)
+        metadata::pallet_item(snapshot, &address)
             .map(Json)
             .map_err(tool_error)
     }
@@ -208,9 +210,9 @@ impl MetadataServer {
         &self,
         Parameters(request): Parameters<SearchRequest>,
     ) -> Result<Json<SearchResults>, String> {
-        let loaded = self.metadata().await.map_err(tool_error)?;
+        let snapshot = self.metadata().await.map_err(tool_error)?;
 
-        metadata::search(loaded, &request)
+        metadata::search(snapshot, &request)
             .map(Json)
             .map_err(tool_error)
     }

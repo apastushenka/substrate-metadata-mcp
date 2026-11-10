@@ -4,7 +4,7 @@ use rmcp::schemars::{self, JsonSchema};
 use serde::{Deserialize, Serialize};
 
 use super::{
-    LoadedMetadata,
+    MetadataSnapshot,
     item::docs,
     lookup,
     registry::{Field, type_name},
@@ -55,13 +55,13 @@ pub struct RuntimeApiMethodDetails {
 }
 
 pub fn runtime_api_method(
-    loaded: &LoadedMetadata,
+    snapshot: &MetadataSnapshot,
     address: &RuntimeApiMethodAddress,
 ) -> anyhow::Result<RuntimeApiMethodDetails> {
     let (runtime_api, method) =
-        lookup::runtime_api_method(loaded, &address.runtime_api, &address.name)?;
+        lookup::runtime_api_method(snapshot, &address.runtime_api, &address.name)?;
 
-    let types = loaded.metadata.types();
+    let types = snapshot.metadata.types();
 
     let arguments = method
         .inputs()

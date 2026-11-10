@@ -6,7 +6,7 @@ use rmcp::schemars::{self, JsonSchema};
 use serde::Serialize;
 
 use super::{
-    LoadedMetadata,
+    MetadataSnapshot,
     item::{PalletItemKind, for_each_item, summary},
 };
 
@@ -83,8 +83,8 @@ impl PalletItemCounts {
     }
 }
 
-pub fn pallets(loaded: &LoadedMetadata) -> PalletList {
-    let metadata = &loaded.metadata;
+pub fn pallets(snapshot: &MetadataSnapshot) -> PalletList {
+    let metadata = &snapshot.metadata;
 
     // Counted from the walk `list_pallet_items` pages over, under the same
     // `from_item_kind` filter, so a count here and that tool's `total` move together.
