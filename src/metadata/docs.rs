@@ -3,6 +3,9 @@
 
 const SUMMARY_CHARS: usize = 200;
 
+/// The first non-blank line, cut after `SUMMARY_CHARS` characters, or `None` if every line is
+/// blank. The `summary` fields of the responses promise this in their descriptions, so change
+/// them together.
 pub fn summary(docs: &[String]) -> Option<String> {
     let line = docs
         .iter()
@@ -15,9 +18,8 @@ pub fn summary(docs: &[String]) -> Option<String> {
     }
 }
 
-/// FRAME stores the text after `///` as-is, so almost every line starts with a
-/// space. rustdoc strips exactly one; so do we. `trim_start` would also eat the
-/// indentation of code blocks. Empty lines stay: they separate paragraphs.
+/// FRAME keeps the space after `///`; rustdoc strips exactly one, and so do we. `trim_start`
+/// would also eat code-block indentation, and empty lines stay to separate paragraphs.
 pub fn full(docs: &[String]) -> Vec<String> {
     docs.iter()
         .map(|line| match line.strip_prefix(' ') {
