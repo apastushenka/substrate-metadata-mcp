@@ -3,7 +3,7 @@
 use rmcp::schemars::{self, JsonSchema};
 use serde::Serialize;
 
-use super::{MetadataSnapshot, item::summary};
+use crate::metadata::{MetadataSnapshot, item::summary};
 
 // A struct rather than a bare `Vec`: MCP requires `structuredContent` to be an object.
 #[derive(Debug, Serialize, JsonSchema)]

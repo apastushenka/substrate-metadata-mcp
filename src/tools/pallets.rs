@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use rmcp::schemars::{self, JsonSchema};
 use serde::Serialize;
 
-use super::{
+use crate::metadata::{
     MetadataSnapshot,
     item::{PalletItemKind, for_each_item, summary},
 };

@@ -1,6 +1,7 @@
 mod cli;
 mod metadata;
 mod server;
+mod tools;
 
 use std::process::ExitCode;
 

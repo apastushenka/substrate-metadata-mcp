@@ -3,7 +3,7 @@
 use rmcp::schemars::{self, JsonSchema};
 use serde::{Deserialize, Serialize};
 
-use super::{
+use crate::metadata::{
     MetadataSnapshot,
     item::docs,
     lookup,

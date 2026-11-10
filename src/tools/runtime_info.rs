@@ -7,7 +7,7 @@ use scale_decode::{DecodeAsType, IntoVisitor};
 use serde::Serialize;
 use subxt_metadata::Metadata;
 
-use super::MetadataSnapshot;
+use crate::metadata::MetadataSnapshot;
 
 /// The `System` pallet and the constants read from it.
 mod system {

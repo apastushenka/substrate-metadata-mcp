@@ -8,7 +8,7 @@ use subxt_metadata::{
     ConstantMetadata, PalletMetadata, StorageEntryMetadata, StorageHasher, ViewFunctionMetadata,
 };
 
-use super::{
+use crate::metadata::{
     MetadataSnapshot,
     item::{PalletItemKind, docs},
     lookup::{self, PalletItem},

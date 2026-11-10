@@ -13,7 +13,7 @@ use rmcp::schemars::{self, JsonSchema};
 use serde::{Deserialize, Serialize};
 
 use self::tokens::tokenize;
-use super::{
+use crate::metadata::{
     MetadataSnapshot,
     item::{Item, ItemKind, ItemRef, for_each_item},
 };

@@ -11,10 +11,13 @@ use rmcp::{
 use subxt_utils_fetchmetadata::Url;
 use tokio::sync::OnceCell;
 
-use crate::metadata::{
-    self, MetadataSnapshot, PalletItemAddress, PalletItemDetails, PalletItems, PalletItemsRequest,
-    PalletList, RuntimeApiList, RuntimeApiMethodAddress, RuntimeApiMethodDetails,
-    RuntimeApiMethods, RuntimeApiMethodsRequest, RuntimeInfo, SearchRequest, SearchResults,
+use crate::{
+    metadata::{self, MetadataSnapshot},
+    tools::{
+        self, PalletItemAddress, PalletItemDetails, PalletItems, PalletItemsRequest, PalletList,
+        RuntimeApiList, RuntimeApiMethodAddress, RuntimeApiMethodDetails, RuntimeApiMethods,
+        RuntimeApiMethodsRequest, RuntimeInfo, SearchRequest, SearchResults,
+    },
 };
 
 #[derive(Clone)]
@@ -69,9 +72,7 @@ impl MetadataServer {
     async fn get_runtime_info(&self) -> Result<Json<RuntimeInfo>, String> {
         let snapshot = self.metadata().await.map_err(tool_error)?;
 
-        metadata::runtime_info(snapshot)
-            .map(Json)
-            .map_err(tool_error)
+        tools::runtime_info(snapshot).map(Json).map_err(tool_error)
     }
 
     /// List every pallet of the runtime, never truncated. Almost everything a runtime does
@@ -90,7 +91,7 @@ impl MetadataServer {
     async fn list_pallets(&self) -> Result<Json<PalletList>, String> {
         let snapshot = self.metadata().await.map_err(tool_error)?;
 
-        Ok(Json(metadata::pallets(snapshot)))
+        Ok(Json(tools::pallets(snapshot)))
     }
 
     /// List every runtime API of the runtime, never truncated. Each one is a group of
@@ -103,7 +104,7 @@ impl MetadataServer {
     async fn list_runtime_apis(&self) -> Result<Json<RuntimeApiList>, String> {
         let snapshot = self.metadata().await.map_err(tool_error)?;
 
-        Ok(Json(metadata::runtime_apis(snapshot)))
+        Ok(Json(tools::runtime_apis(snapshot)))
     }
 
     /// List what one pallet contains, paged and never truncated. `search` ranks and
@@ -123,7 +124,7 @@ impl MetadataServer {
     ) -> Result<Json<PalletItems>, String> {
         let snapshot = self.metadata().await.map_err(tool_error)?;
 
-        metadata::pallet_items(snapshot, &request)
+        tools::pallet_items(snapshot, &request)
             .map(Json)
             .map_err(tool_error)
     }
@@ -138,7 +139,7 @@ impl MetadataServer {
     ) -> Result<Json<RuntimeApiMethods>, String> {
         let snapshot = self.metadata().await.map_err(tool_error)?;
 
-        metadata::runtime_api_methods(snapshot, &request)
+        tools::runtime_api_methods(snapshot, &request)
             .map(Json)
             .map_err(tool_error)
     }
@@ -153,7 +154,7 @@ impl MetadataServer {
     ) -> Result<Json<RuntimeApiMethodDetails>, String> {
         let snapshot = self.metadata().await.map_err(tool_error)?;
 
-        metadata::runtime_api_method(snapshot, &address)
+        tools::runtime_api_method(snapshot, &address)
             .map(Json)
             .map_err(tool_error)
     }
@@ -184,7 +185,7 @@ impl MetadataServer {
     ) -> Result<Json<PalletItemDetails>, String> {
         let snapshot = self.metadata().await.map_err(tool_error)?;
 
-        metadata::pallet_item(snapshot, &address)
+        tools::pallet_item(snapshot, &address)
             .map(Json)
             .map_err(tool_error)
     }
@@ -212,7 +213,7 @@ impl MetadataServer {
     ) -> Result<Json<SearchResults>, String> {
         let snapshot = self.metadata().await.map_err(tool_error)?;
 
-        metadata::search(snapshot, &request)
+        tools::search(snapshot, &request)
             .map(Json)
             .map_err(tool_error)
     }

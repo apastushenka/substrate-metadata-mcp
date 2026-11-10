@@ -1,32 +1,14 @@
-//! Fetching and decoding runtime metadata, and reading facts out of it.
+//! Fetching and decoding runtime metadata, and what the tools read it with: the walk over
+//! pallet and runtime API items, type names and values, and name lookup.
 
-mod item;
-mod lookup;
-mod pallet_item;
-mod pallet_items;
-mod pallets;
-mod registry;
-mod runtime_api_method;
-mod runtime_api_methods;
-mod runtime_apis;
-mod runtime_info;
-mod search;
+pub mod item;
+pub mod lookup;
+pub mod registry;
 
 use anyhow::Context;
 use frame_metadata::{META_RESERVED, RuntimeMetadataPrefixed};
 use subxt_metadata::{Metadata, decode_runtime_metadata};
 use subxt_utils_fetchmetadata::{MetadataVersion, Url, from_url};
-
-pub use self::{
-    pallet_item::{PalletItemAddress, PalletItemDetails, pallet_item},
-    pallet_items::{PalletItems, PalletItemsRequest, pallet_items},
-    pallets::{PalletList, pallets},
-    runtime_api_method::{RuntimeApiMethodAddress, RuntimeApiMethodDetails, runtime_api_method},
-    runtime_api_methods::{RuntimeApiMethods, RuntimeApiMethodsRequest, runtime_api_methods},
-    runtime_apis::{RuntimeApiList, runtime_apis},
-    runtime_info::{RuntimeInfo, runtime_info},
-    search::{SearchRequest, SearchResults, search},
-};
 
 /// `Metadata` does not keep the version of the format it was decoded from, so [`load`]
 /// records it alongside.
