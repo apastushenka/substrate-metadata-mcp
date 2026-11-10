@@ -6,8 +6,8 @@ use rmcp::schemars::{self, JsonSchema};
 use serde::Serialize;
 
 use crate::metadata::{
-    MetadataSnapshot,
-    item::{PalletItemKind, for_each_item, summary},
+    MetadataSnapshot, docs,
+    item::{PalletItemKind, for_each_item},
 };
 
 // A struct rather than a bare `Vec`: MCP requires `structuredContent` to be an object.
@@ -114,7 +114,7 @@ pub fn pallets(snapshot: &MetadataSnapshot) -> PalletList {
             // three from the pallet's single `index` in v14, v15 and v16 alike, so any
             // one of them is the pallet's index.
             index: pallet.call_index(),
-            summary: summary(pallet.docs()),
+            summary: docs::summary(pallet.docs()),
             counts: counts.remove(pallet.name()).unwrap_or_default(),
         })
         .collect();

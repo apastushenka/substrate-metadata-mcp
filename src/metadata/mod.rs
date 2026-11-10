@@ -1,6 +1,8 @@
 //! Fetching and decoding runtime metadata, and what the tools read it with: the walk over
-//! pallet and runtime API items, type names and values, and name lookup.
+//! pallet and runtime API items, their documentation, type names and values, and name
+//! lookup.
 
+pub mod docs;
 pub mod item;
 pub mod lookup;
 pub mod registry;

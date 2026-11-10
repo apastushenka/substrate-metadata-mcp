@@ -9,8 +9,8 @@ use subxt_metadata::{
 };
 
 use crate::metadata::{
-    MetadataSnapshot,
-    item::{PalletItemKind, docs},
+    MetadataSnapshot, docs,
+    item::PalletItemKind,
     lookup::{self, PalletItem},
     registry::{Field, render_value, type_name},
 };
@@ -228,7 +228,7 @@ fn call_details(
     PalletItemDetails {
         pallet: String::from(pallet.name()),
         name: variant.name.clone(),
-        docs: docs(&variant.docs),
+        docs: docs::full(&variant.docs),
         shape: PalletItemShape::Call {
             pallet_index: pallet.call_index(),
             call_index: variant.index,
@@ -250,7 +250,7 @@ fn view_function_details(
     PalletItemDetails {
         pallet: String::from(pallet.name()),
         name: String::from(view_function.name()),
-        docs: docs(view_function.docs()),
+        docs: docs::full(view_function.docs()),
         shape: PalletItemShape::ViewFunction {
             arguments,
             returns: type_name(view_function.output_ty(), types),
@@ -289,7 +289,7 @@ fn storage_details(
     Ok(PalletItemDetails {
         pallet: String::from(pallet.name()),
         name: String::from(entry.name()),
-        docs: docs(entry.docs()),
+        docs: docs::full(entry.docs()),
         shape: PalletItemShape::Storage {
             keys,
             value_type,
@@ -317,7 +317,7 @@ fn constant_details(
     Ok(PalletItemDetails {
         pallet: String::from(pallet.name()),
         name: String::from(constant.name()),
-        docs: docs(constant.docs()),
+        docs: docs::full(constant.docs()),
         shape: PalletItemShape::Constant { ty, value },
     })
 }
@@ -330,7 +330,7 @@ fn event_details(
     PalletItemDetails {
         pallet: String::from(pallet.name()),
         name: variant.name.clone(),
-        docs: docs(&variant.docs),
+        docs: docs::full(&variant.docs),
         shape: PalletItemShape::Event {
             pallet_index: pallet.event_index(),
             event_index: variant.index,
@@ -347,7 +347,7 @@ fn error_details(
     PalletItemDetails {
         pallet: String::from(pallet.name()),
         name: variant.name.clone(),
-        docs: docs(&variant.docs),
+        docs: docs::full(&variant.docs),
         shape: PalletItemShape::Error {
             pallet_index: pallet.error_index(),
             error_index: variant.index,

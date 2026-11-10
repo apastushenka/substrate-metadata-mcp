@@ -8,7 +8,7 @@ use rmcp::schemars::{self, JsonSchema};
 use scale_info::{PortableRegistry, TypeDef, TypeDefPrimitive, TypeParameter, form::PortableForm};
 use serde::Serialize;
 
-use super::item::docs;
+use super::docs;
 
 /// A field of a call, event, error, view function or runtime API method: a name
 /// if it has one, the type as the registry names it, and the field's own
@@ -61,7 +61,7 @@ impl Field {
         Self {
             name: field.name.clone(),
             ty: type_name(field.ty.id, types),
-            docs: docs(&field.docs),
+            docs: docs::full(&field.docs),
         }
     }
 }
