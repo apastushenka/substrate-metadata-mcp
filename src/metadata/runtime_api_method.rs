@@ -6,8 +6,8 @@ use serde::{Deserialize, Serialize};
 
 use super::{
     LoadedMetadata,
-    item::{ambiguous_name_message, docs},
-    lookup::{self, QualifiedName, RuntimeApiLookupError, RuntimeApiMethodLookupError},
+    item::docs,
+    lookup::{self, runtime_api_method_lookup_error_message},
     registry::{Field, type_name},
 };
 
@@ -85,61 +85,4 @@ pub fn runtime_api_method(
         arguments,
         returns,
     })
-}
-
-fn runtime_api_method_lookup_error_message(
-    error: &RuntimeApiMethodLookupError,
-    version: u32,
-) -> String {
-    match error {
-        RuntimeApiMethodLookupError::QualifiedName(QualifiedName { qualifier, name }) => format!(
-            "`name` is the method's own name: pass `{qualifier}` as `runtime_api` and `{name}` as `name`"
-        ),
-        RuntimeApiMethodLookupError::AmbiguousName(ambiguous) => ambiguous_name_message(ambiguous),
-        RuntimeApiMethodLookupError::RuntimeApi(error) => {
-            runtime_api_lookup_error_message(error, version)
-        }
-        RuntimeApiMethodLookupError::UnknownMethod { runtime_api, name } => format!(
-            "no method named `{name}` in runtime API `{runtime_api}`; `list_runtime_api_methods` lists them"
-        ),
-    }
-}
-
-pub(super) fn runtime_api_lookup_error_message(
-    error: &RuntimeApiLookupError,
-    version: u32,
-) -> String {
-    // Metadata before v15 carries no runtime APIs at all, so whatever else the name missed,
-    // that is why it was not found.
-    if version < 15 {
-        return format!("runtime APIs need metadata v15; this metadata is v{version}");
-    }
-
-    match error {
-        RuntimeApiLookupError::AmbiguousName(ambiguous) => ambiguous_name_message(ambiguous),
-        RuntimeApiLookupError::IsPallet(pallet) => {
-            format!(
-                "`{pallet}` is a pallet, not a runtime API; `list_pallet_items` lists its items and `get_pallet_item` reads one"
-            )
-        }
-        RuntimeApiLookupError::UnknownRuntimeApi(name) => {
-            format!("no runtime API named `{name}`; `list_runtime_apis` lists the valid names")
-        }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn runtime_api_lookup_error_message_blames_the_version_before_v15() {
-        assert_eq!(
-            runtime_api_lookup_error_message(
-                &RuntimeApiLookupError::IsPallet(String::from("Balances")),
-                14
-            ),
-            "runtime APIs need metadata v15; this metadata is v14"
-        );
-    }
 }

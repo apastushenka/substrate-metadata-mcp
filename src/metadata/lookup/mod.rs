@@ -1,9 +1,9 @@
 //! Finding pallets, runtime APIs and their items by the names a caller gives.
 //!
 //! A name is found as the metadata spells it, or ignoring case when that picks out a single
-//! name. A miss comes back as data, never as text: how to word it, and which tool to send the
-//! caller to, is up to the server. That is why the `*LookupError` types implement neither
-//! `Display` nor `std::error::Error`: `?` cannot pass a miss on before the server words it.
+//! name. A miss comes back as data: `error` defines it, together with the words this server
+//! puts it in. The `*LookupError` types implement neither `Display` nor `std::error::Error`,
+//! so `?` cannot pass a miss on before it has been worded.
 
 use scale_info::{Variant, form::PortableForm};
 use subxt_metadata::{
@@ -12,6 +12,17 @@ use subxt_metadata::{
 };
 
 use super::item::PalletItemKind;
+
+mod error;
+
+use self::error::{
+    AmbiguousName, PalletItemLookupError, PalletLookupError, QualifiedName, RuntimeApiLookupError,
+    RuntimeApiMethodLookupError,
+};
+pub use self::error::{
+    pallet_item_lookup_error_message, pallet_lookup_error_message,
+    runtime_api_lookup_error_message, runtime_api_method_lookup_error_message,
+};
 
 /// An item found in a pallet, one variant per kind.
 pub enum PalletItem<'a> {
@@ -31,131 +42,6 @@ impl<'a> PalletItem<'a> {
             Self::Storage(entry) => entry.name(),
             Self::Constant(constant) => constant.name(),
         }
-    }
-}
-
-/// Several names match ignoring case, and none matches exactly. `name` is as the caller wrote
-/// it, `matches` as the metadata spells them.
-#[derive(Debug)]
-pub struct AmbiguousName {
-    pub name: String,
-    pub matches: Vec<String>,
-}
-
-/// A name written together with its pallet or runtime API, as in `Balances::transfer_all` or
-/// `Core.version`: `qualifier` is the part before the separator, `name` the part after it.
-#[derive(Debug, PartialEq, Eq)]
-pub struct QualifiedName {
-    pub qualifier: String,
-    pub name: String,
-}
-
-impl QualifiedName {
-    /// `None` unless both halves are there: a name that only trails a separator is a typo,
-    /// not an address.
-    fn parse(name: &str) -> Option<Self> {
-        let (qualifier, name) = name.rsplit_once("::").or_else(|| name.rsplit_once('.'))?;
-
-        if qualifier.is_empty() || name.is_empty() {
-            return None;
-        }
-
-        Some(Self {
-            qualifier: String::from(qualifier),
-            name: String::from(name),
-        })
-    }
-}
-
-/// Why `pallet` found nothing.
-#[derive(Debug)]
-pub enum PalletLookupError {
-    /// The name matches several pallets, or several runtime APIs, ignoring case.
-    AmbiguousName(AmbiguousName),
-    /// No pallet has the name, but this runtime API does.
-    IsRuntimeApi(String),
-    /// Neither a pallet nor a runtime API has the name, given as the caller wrote it.
-    UnknownPallet(String),
-}
-
-impl From<AmbiguousName> for PalletLookupError {
-    fn from(ambiguous: AmbiguousName) -> Self {
-        Self::AmbiguousName(ambiguous)
-    }
-}
-
-/// Why `pallet_item` found nothing.
-#[derive(Debug)]
-pub enum PalletItemLookupError {
-    /// The item's name came with its pallet.
-    QualifiedName(QualifiedName),
-    /// The name matches several items of this kind in the pallet, ignoring case.
-    AmbiguousName(AmbiguousName),
-    /// The pallet itself was not found.
-    Pallet(PalletLookupError),
-    /// The pallet has no item of this kind by that name: `pallet` as the metadata spells it,
-    /// `name` as the caller wrote it. `candidates` are the pallet's items of other kinds that
-    /// do have the name: each its kind, and the name as the metadata spells it.
-    UnknownItem {
-        pallet: String,
-        kind: PalletItemKind,
-        name: String,
-        candidates: Vec<(PalletItemKind, String)>,
-    },
-}
-
-impl From<AmbiguousName> for PalletItemLookupError {
-    fn from(ambiguous: AmbiguousName) -> Self {
-        Self::AmbiguousName(ambiguous)
-    }
-}
-
-impl From<PalletLookupError> for PalletItemLookupError {
-    fn from(error: PalletLookupError) -> Self {
-        Self::Pallet(error)
-    }
-}
-
-/// Why `runtime_api` found nothing.
-#[derive(Debug)]
-pub enum RuntimeApiLookupError {
-    /// The name matches several runtime APIs, or several pallets, ignoring case.
-    AmbiguousName(AmbiguousName),
-    /// No runtime API has the name, but this pallet does.
-    IsPallet(String),
-    /// Neither a runtime API nor a pallet has the name, given as the caller wrote it.
-    UnknownRuntimeApi(String),
-}
-
-impl From<AmbiguousName> for RuntimeApiLookupError {
-    fn from(ambiguous: AmbiguousName) -> Self {
-        Self::AmbiguousName(ambiguous)
-    }
-}
-
-/// Why `runtime_api_method` found nothing.
-#[derive(Debug)]
-pub enum RuntimeApiMethodLookupError {
-    /// The method's name came with its runtime API.
-    QualifiedName(QualifiedName),
-    /// The name matches several methods of the runtime API, ignoring case.
-    AmbiguousName(AmbiguousName),
-    /// The runtime API itself was not found.
-    RuntimeApi(RuntimeApiLookupError),
-    /// The runtime API has no method by that name: `runtime_api` as the metadata spells it,
-    /// `name` as the caller wrote it.
-    UnknownMethod { runtime_api: String, name: String },
-}
-
-impl From<AmbiguousName> for RuntimeApiMethodLookupError {
-    fn from(ambiguous: AmbiguousName) -> Self {
-        Self::AmbiguousName(ambiguous)
-    }
-}
-
-impl From<RuntimeApiLookupError> for RuntimeApiMethodLookupError {
-    fn from(error: RuntimeApiLookupError) -> Self {
-        Self::RuntimeApi(error)
     }
 }
 
@@ -391,50 +277,5 @@ mod tests {
 
         assert_eq!(ambiguous.name, "BALANCES");
         assert_eq!(ambiguous.matches, ["balances", "Balances"]);
-    }
-
-    fn qualified(qualifier: &str, name: &str) -> Option<QualifiedName> {
-        Some(QualifiedName {
-            qualifier: String::from(qualifier),
-            name: String::from(name),
-        })
-    }
-
-    #[test]
-    fn qualified_name_parse_splits_on_colons() {
-        assert_eq!(
-            QualifiedName::parse("Balances::transfer_all"),
-            qualified("Balances", "transfer_all")
-        );
-        assert_eq!(
-            QualifiedName::parse("Core::version"),
-            qualified("Core", "version")
-        );
-    }
-
-    #[test]
-    fn qualified_name_parse_splits_on_dot() {
-        assert_eq!(
-            QualifiedName::parse("Balances.transfer"),
-            qualified("Balances", "transfer")
-        );
-        assert_eq!(
-            QualifiedName::parse("Core.version"),
-            qualified("Core", "version")
-        );
-    }
-
-    #[test]
-    fn qualified_name_parse_leaves_plain_name_alone() {
-        assert_eq!(QualifiedName::parse("transfer_all"), None);
-        assert_eq!(QualifiedName::parse("version"), None);
-    }
-
-    #[test]
-    fn qualified_name_parse_needs_both_halves() {
-        assert_eq!(QualifiedName::parse("transfer."), None);
-        assert_eq!(QualifiedName::parse("::transfer_all"), None);
-        assert_eq!(QualifiedName::parse("version."), None);
-        assert_eq!(QualifiedName::parse("::version"), None);
     }
 }

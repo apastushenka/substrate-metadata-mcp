@@ -7,8 +7,7 @@ use serde::{Deserialize, Serialize};
 use super::{
     LoadedMetadata,
     item::{Item, ItemRef, PalletItemKind, for_each_item},
-    lookup,
-    pallet_item::pallet_lookup_error_message,
+    lookup::{self, pallet_lookup_error_message},
 };
 
 #[derive(Debug, Deserialize, JsonSchema)]

@@ -10,8 +10,8 @@ use subxt_metadata::{
 
 use super::{
     LoadedMetadata,
-    item::{PalletItemKind, ambiguous_name_message, docs},
-    lookup::{self, PalletItem, PalletItemLookupError, PalletLookupError, QualifiedName},
+    item::{PalletItemKind, docs},
+    lookup::{self, PalletItem, pallet_item_lookup_error_message},
     registry::{Field, render_value, type_name},
 };
 
@@ -369,64 +369,6 @@ fn variant_fields(variant: &Variant<PortableForm>, types: &PortableRegistry) -> 
         .collect()
 }
 
-fn pallet_item_lookup_error_message(error: &PalletItemLookupError, version: u32) -> String {
-    match error {
-        PalletItemLookupError::QualifiedName(QualifiedName { qualifier, name }) => format!(
-            "`name` is the item's own name: pass `{qualifier}` as `pallet` and `{name}` as `name`"
-        ),
-        PalletItemLookupError::AmbiguousName(ambiguous) => ambiguous_name_message(ambiguous),
-        PalletItemLookupError::Pallet(error) => pallet_lookup_error_message(error),
-        PalletItemLookupError::UnknownItem {
-            pallet,
-            kind,
-            name,
-            candidates,
-        } => unknown_item_message(pallet, *kind, name, candidates, version),
-    }
-}
-
-pub(super) fn pallet_lookup_error_message(error: &PalletLookupError) -> String {
-    match error {
-        PalletLookupError::AmbiguousName(ambiguous) => ambiguous_name_message(ambiguous),
-        PalletLookupError::IsRuntimeApi(runtime_api) => format!(
-            "`{runtime_api}` is a runtime API, not a pallet; `list_runtime_api_methods` lists its methods and `get_runtime_api_method` reads one"
-        ),
-        PalletLookupError::UnknownPallet(name) => {
-            format!("no pallet named `{name}`; `list_pallets` lists the valid names")
-        }
-    }
-}
-
-fn unknown_item_message(
-    pallet: &str,
-    kind: PalletItemKind,
-    name: &str,
-    candidates: &[(PalletItemKind, String)],
-    version: u32,
-) -> String {
-    let kind_name = kind.as_str();
-
-    if !candidates.is_empty() {
-        // The metadata's spelling, not the request's: this is the string the caller
-        // will copy into the retry, and `name` below is whatever they typed.
-        let candidates = candidates
-            .iter()
-            .map(|(kind, actual)| format!("`{}` has `{actual}`", kind.as_str()))
-            .collect::<Vec<_>>()
-            .join(", ");
-
-        return format!("no `{kind_name}` named `{name}` in pallet `{pallet}`, but {candidates}");
-    }
-
-    if kind == PalletItemKind::ViewFunction && version < 16 {
-        return format!(
-            "no `{kind_name}` named `{name}` in pallet `{pallet}`; view functions need metadata v16; this metadata is v{version}, so no pallet has any"
-        );
-    }
-
-    format!("no `{kind_name}` named `{name}` in pallet `{pallet}`; `list_pallet_items` lists them")
-}
-
 #[cfg(test)]
 mod tests {
     use rmcp::serde_json::{json, to_value};
@@ -458,53 +400,6 @@ mod tests {
                 "value_type": "ActiveEraInfo",
                 "optional": true
             })
-        );
-    }
-
-    #[test]
-    fn unknown_item_message_names_the_other_kind() {
-        assert_eq!(
-            unknown_item_message(
-                "Balances",
-                PalletItemKind::Call,
-                "ExistentialDeposit",
-                &[(PalletItemKind::Constant, String::from("ExistentialDeposit"))],
-                16
-            ),
-            "no `call` named `ExistentialDeposit` in pallet `Balances`, but `constant` has `ExistentialDeposit`"
-        );
-    }
-
-    #[test]
-    fn unknown_item_message_lists_several_other_kinds() {
-        assert_eq!(
-            unknown_item_message(
-                "System",
-                PalletItemKind::Call,
-                "account",
-                &[
-                    (PalletItemKind::Storage, String::from("Account")),
-                    (PalletItemKind::Event, String::from("Account"))
-                ],
-                16
-            ),
-            "no `call` named `account` in pallet `System`, but `storage` has `Account`, `event` has `Account`"
-        );
-    }
-
-    #[test]
-    fn unknown_item_message_points_at_the_version_not_the_listing_before_v16() {
-        assert_eq!(
-            unknown_item_message("Balances", PalletItemKind::ViewFunction, "get", &[], 15),
-            "no `view_function` named `get` in pallet `Balances`; view functions need metadata v16; this metadata is v15, so no pallet has any"
-        );
-    }
-
-    #[test]
-    fn unknown_item_message_does_not_note_the_view_function_version_on_v16() {
-        assert_eq!(
-            unknown_item_message("Balances", PalletItemKind::ViewFunction, "get", &[], 16),
-            "no `view_function` named `get` in pallet `Balances`; `list_pallet_items` lists them"
         );
     }
 

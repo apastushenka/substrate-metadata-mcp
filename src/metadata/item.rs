@@ -7,8 +7,6 @@ use rmcp::schemars::{self, JsonSchema};
 use serde::{Deserialize, Serialize};
 use subxt_metadata::Metadata;
 
-use super::lookup::AmbiguousName;
-
 /// A pallet, a runtime API, or an item inside one of them.
 ///
 /// `runtime_api` is a group of host-callable runtime methods; `runtime_api_method` is
@@ -221,14 +219,6 @@ pub fn for_each_item(metadata: &Metadata, mut visit: impl FnMut(ItemRef<'_>)) {
     }
 }
 
-pub fn ambiguous_name_message(ambiguous: &AmbiguousName) -> String {
-    format!(
-        "`{}` matches several names ignoring case: {}",
-        ambiguous.name,
-        ambiguous.matches.join(", ")
-    )
-}
-
 const SUMMARY_CHARS: usize = 200;
 
 pub fn summary(docs: &[String]) -> Option<String> {
@@ -259,19 +249,6 @@ pub fn docs(lines: &[String]) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn ambiguous_name_message_lists_the_matches() {
-        let ambiguous = AmbiguousName {
-            name: String::from("BALANCES"),
-            matches: vec![String::from("balances"), String::from("Balances")],
-        };
-
-        assert_eq!(
-            ambiguous_name_message(&ambiguous),
-            "`BALANCES` matches several names ignoring case: balances, Balances"
-        );
-    }
 
     // `as_str()` is a value a model will pass back as `kind`, so it has to be one the
     // request accepts and `PalletItemKind::ALL` has to list them all.

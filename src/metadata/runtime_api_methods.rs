@@ -7,8 +7,7 @@ use serde::{Deserialize, Serialize};
 use super::{
     LoadedMetadata,
     item::{Item, ItemKind, for_each_item},
-    lookup,
-    runtime_api_method::runtime_api_lookup_error_message,
+    lookup::{self, runtime_api_lookup_error_message},
 };
 
 #[derive(Debug, Deserialize, JsonSchema)]
