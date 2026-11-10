@@ -1,12 +1,13 @@
 //! Listing the methods of one runtime API.
 
-use anyhow::Context;
+use anyhow::{Context, anyhow};
 use rmcp::schemars::{self, JsonSchema};
 use serde::{Deserialize, Serialize};
 
 use super::{
     LoadedMetadata,
-    item::{Item, ItemKind, for_each_item, resolve_name},
+    item::{Item, ItemKind, ambiguous_name_message, for_each_item},
+    lookup::resolve_name,
 };
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -34,7 +35,8 @@ pub fn runtime_api_methods(
     let runtime_api = resolve_name(
         &request.runtime_api,
         metadata.runtime_api_traits().map(|api| api.name()),
-    )?
+    )
+    .map_err(|ambiguous| anyhow!(ambiguous_name_message(&ambiguous)))?
     .with_context(|| {
         format!(
             "no runtime API named `{}`; `list_runtime_apis` lists the valid names",

@@ -1,6 +1,6 @@
 //! Reading one item of a pallet.
 
-use anyhow::{Context, bail};
+use anyhow::{Context, anyhow};
 use rmcp::schemars::{self, JsonSchema};
 use scale_info::{PortableRegistry, Variant, form::PortableForm};
 use serde::{Deserialize, Serialize};
@@ -10,7 +10,8 @@ use subxt_metadata::{
 
 use super::{
     LoadedMetadata,
-    item::{PalletItemKind, docs, resolve_name, split_qualified_name},
+    item::{PalletItemKind, ambiguous_name_message, docs},
+    lookup::{self, PalletItem, PalletItemLookupError, PalletLookupError, QualifiedName},
     registry::{Field, render_value, type_name},
 };
 
@@ -202,73 +203,25 @@ pub fn pallet_item(
     loaded: &LoadedMetadata,
     address: &PalletItemAddress,
 ) -> anyhow::Result<PalletItemDetails> {
-    // The listings hand back `namespace` and `name` separately, so a qualified name is
-    // already split somewhere: hand the split back rather than accept a second spelling.
-    if let Some((qualifier, item)) = split_qualified_name(&address.name) {
-        bail!(
-            "`name` is the item's own name: pass `{qualifier}` as `pallet` and `{item}` as `name`"
-        );
-    }
+    let (pallet, item) = lookup::pallet_item(
+        &loaded.metadata,
+        &address.pallet,
+        address.kind,
+        &address.name,
+    )
+    .map_err(|error| anyhow!(pallet_item_lookup_error_message(&error, loaded.version)))?;
 
-    let pallet_name = resolve_pallet_name(loaded, &address.pallet)?;
-    let pallet = loaded
-        .metadata
-        .pallet_by_name(pallet_name)
-        .expect("resolve_pallet_name selected this pallet");
-
-    let name = resolve_item_name(&pallet, address, loaded.version)?;
     let types = loaded.metadata.types();
 
-    match address.kind {
-        PalletItemKind::Call => {
-            let variant = pallet
-                .call_variant_by_name(name)
-                .expect("resolve_item_name found this call");
-
-            Ok(call_details(&pallet, variant, types))
-        }
-        PalletItemKind::ViewFunction => {
-            let view_function = pallet
-                .view_function_by_name(name)
-                .expect("resolve_item_name found this view function");
-
+    match item {
+        PalletItem::Call(variant) => Ok(call_details(&pallet, variant, types)),
+        PalletItem::ViewFunction(view_function) => {
             Ok(view_function_details(&pallet, &view_function, types))
         }
-        PalletItemKind::Storage => {
-            let entry = pallet
-                .storage()
-                .and_then(|storage| storage.entry_by_name(name))
-                .expect("resolve_item_name found this storage entry");
-
-            storage_details(&pallet, entry, types)
-        }
-        PalletItemKind::Constant => {
-            let constant = pallet
-                .constant_by_name(name)
-                .expect("resolve_item_name found this constant");
-
-            constant_details(&pallet, constant, types)
-        }
-        PalletItemKind::Event => {
-            let variant = pallet
-                .event_variants()
-                .unwrap_or_default()
-                .iter()
-                .find(|variant| variant.name == name)
-                .expect("resolve_item_name found this event");
-
-            Ok(event_details(&pallet, variant, types))
-        }
-        PalletItemKind::Error => {
-            let variant = pallet
-                .error_variants()
-                .unwrap_or_default()
-                .iter()
-                .find(|variant| variant.name == name)
-                .expect("resolve_item_name found this error");
-
-            Ok(error_details(&pallet, variant, types))
-        }
+        PalletItem::Storage(entry) => storage_details(&pallet, entry, types),
+        PalletItem::Constant(constant) => constant_details(&pallet, constant, types),
+        PalletItem::Event(variant) => Ok(event_details(&pallet, variant, types)),
+        PalletItem::Error(variant) => Ok(error_details(&pallet, variant, types)),
     }
 }
 
@@ -416,123 +369,53 @@ fn variant_fields(variant: &Variant<PortableForm>, types: &PortableRegistry) -> 
         .collect()
 }
 
-fn resolve_pallet_name<'a>(loaded: &'a LoadedMetadata, name: &str) -> anyhow::Result<&'a str> {
-    let metadata = &loaded.metadata;
-
-    if let Some(pallet) = resolve_name(name, metadata.pallets().map(|pallet| pallet.name()))? {
-        return Ok(pallet);
+fn pallet_item_lookup_error_message(error: &PalletItemLookupError, version: u32) -> String {
+    match error {
+        PalletItemLookupError::QualifiedName(QualifiedName { qualifier, name }) => format!(
+            "`name` is the item's own name: pass `{qualifier}` as `pallet` and `{name}` as `name`"
+        ),
+        PalletItemLookupError::AmbiguousName(ambiguous) => ambiguous_name_message(ambiguous),
+        PalletItemLookupError::Pallet(error) => pallet_lookup_error_message(error),
+        PalletItemLookupError::UnknownItem {
+            pallet,
+            kind,
+            name,
+            candidates,
+        } => unknown_item_message(pallet, *kind, name, candidates, version),
     }
+}
 
-    if let Some(runtime_api) =
-        resolve_name(name, metadata.runtime_api_traits().map(|api| api.name()))?
-    {
-        bail!(
+fn pallet_lookup_error_message(error: &PalletLookupError) -> String {
+    match error {
+        PalletLookupError::AmbiguousName(ambiguous) => ambiguous_name_message(ambiguous),
+        PalletLookupError::IsRuntimeApi(runtime_api) => format!(
             "`{runtime_api}` is a runtime API, not a pallet; `get_runtime_api_method` reads its methods"
-        );
-    }
-
-    bail!("no pallet named `{name}`; `list_pallets` lists the valid names");
-}
-
-fn resolve_item_name<'a>(
-    pallet: &PalletMetadata<'a>,
-    address: &PalletItemAddress,
-    version: u32,
-) -> anyhow::Result<&'a str> {
-    if let Some(name) = resolve_name_for_kind(pallet, address.kind, &address.name)? {
-        return Ok(name);
-    }
-
-    let mut others = Vec::new();
-
-    for kind in PalletItemKind::ALL {
-        if kind == address.kind {
-            continue;
-        }
-
-        // Advisory: this only decides whether to offer a hint, so an unresolvable name
-        // under a kind nobody asked about must not replace the answer above.
-        if let Some(actual) = resolve_name_for_kind(pallet, kind, &address.name)
-            .ok()
-            .flatten()
-        {
-            others.push((kind, actual));
-        }
-    }
-
-    bail!(
-        "{}",
-        missing_item_message(pallet.name(), address.kind, &address.name, &others, version)
-    );
-}
-
-fn resolve_name_for_kind<'a>(
-    pallet: &PalletMetadata<'a>,
-    kind: PalletItemKind,
-    name: &str,
-) -> anyhow::Result<Option<&'a str>> {
-    match kind {
-        PalletItemKind::Call => resolve_name(
-            name,
-            pallet
-                .call_variants()
-                .unwrap_or_default()
-                .iter()
-                .map(|variant| variant.name.as_str()),
         ),
-        PalletItemKind::ViewFunction => {
-            resolve_name(name, pallet.view_functions().map(|view| view.name()))
+        PalletLookupError::UnknownPallet(name) => {
+            format!("no pallet named `{name}`; `list_pallets` lists the valid names")
         }
-        PalletItemKind::Storage => resolve_name(
-            name,
-            pallet
-                .storage()
-                .map(|storage| storage.entries())
-                .unwrap_or_default()
-                .iter()
-                .map(|entry| entry.name()),
-        ),
-        PalletItemKind::Constant => {
-            resolve_name(name, pallet.constants().map(|constant| constant.name()))
-        }
-        PalletItemKind::Event => resolve_name(
-            name,
-            pallet
-                .event_variants()
-                .unwrap_or_default()
-                .iter()
-                .map(|variant| variant.name.as_str()),
-        ),
-        PalletItemKind::Error => resolve_name(
-            name,
-            pallet
-                .error_variants()
-                .unwrap_or_default()
-                .iter()
-                .map(|variant| variant.name.as_str()),
-        ),
     }
 }
 
-fn missing_item_message(
+fn unknown_item_message(
     pallet: &str,
     kind: PalletItemKind,
     name: &str,
-    others: &[(PalletItemKind, &str)],
+    candidates: &[(PalletItemKind, String)],
     version: u32,
 ) -> String {
     let kind_name = kind.as_str();
 
-    if !others.is_empty() {
+    if !candidates.is_empty() {
         // The metadata's spelling, not the request's: this is the string the caller
         // will copy into the retry, and `name` below is whatever they typed.
-        let others = others
+        let candidates = candidates
             .iter()
             .map(|(kind, actual)| format!("`{}` has `{actual}`", kind.as_str()))
             .collect::<Vec<_>>()
             .join(", ");
 
-        return format!("no `{kind_name}` named `{name}` in pallet `{pallet}`, but {others}");
+        return format!("no `{kind_name}` named `{name}` in pallet `{pallet}`, but {candidates}");
     }
 
     if kind == PalletItemKind::ViewFunction && version < 16 {
@@ -579,13 +462,13 @@ mod tests {
     }
 
     #[test]
-    fn missing_item_message_names_the_other_kind() {
+    fn unknown_item_message_names_the_other_kind() {
         assert_eq!(
-            missing_item_message(
+            unknown_item_message(
                 "Balances",
                 PalletItemKind::Call,
                 "ExistentialDeposit",
-                &[(PalletItemKind::Constant, "ExistentialDeposit")],
+                &[(PalletItemKind::Constant, String::from("ExistentialDeposit"))],
                 16
             ),
             "no `call` named `ExistentialDeposit` in pallet `Balances`, but `constant` has `ExistentialDeposit`"
@@ -593,15 +476,15 @@ mod tests {
     }
 
     #[test]
-    fn missing_item_message_lists_several_other_kinds() {
+    fn unknown_item_message_lists_several_other_kinds() {
         assert_eq!(
-            missing_item_message(
+            unknown_item_message(
                 "System",
                 PalletItemKind::Call,
                 "account",
                 &[
-                    (PalletItemKind::Storage, "Account"),
-                    (PalletItemKind::Event, "Account")
+                    (PalletItemKind::Storage, String::from("Account")),
+                    (PalletItemKind::Event, String::from("Account"))
                 ],
                 16
             ),
@@ -610,17 +493,17 @@ mod tests {
     }
 
     #[test]
-    fn missing_item_message_points_at_the_version_not_the_listing_before_v16() {
+    fn unknown_item_message_points_at_the_version_not_the_listing_before_v16() {
         assert_eq!(
-            missing_item_message("Balances", PalletItemKind::ViewFunction, "get", &[], 15),
+            unknown_item_message("Balances", PalletItemKind::ViewFunction, "get", &[], 15),
             "no `view_function` named `get` in pallet `Balances`; view functions need metadata v16; this metadata is v15, so no pallet has any"
         );
     }
 
     #[test]
-    fn missing_item_message_does_not_note_the_view_function_version_on_v16() {
+    fn unknown_item_message_does_not_note_the_view_function_version_on_v16() {
         assert_eq!(
-            missing_item_message("Balances", PalletItemKind::ViewFunction, "get", &[], 16),
+            unknown_item_message("Balances", PalletItemKind::ViewFunction, "get", &[], 16),
             "no `view_function` named `get` in pallet `Balances`; `list_pallet_items` lists them"
         );
     }

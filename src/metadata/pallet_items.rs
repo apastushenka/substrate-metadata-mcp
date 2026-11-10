@@ -1,12 +1,13 @@
 //! Listing everything one pallet contains.
 
-use anyhow::Context;
+use anyhow::{Context, anyhow};
 use rmcp::schemars::{self, JsonSchema};
 use serde::{Deserialize, Serialize};
 
 use super::{
     LoadedMetadata,
-    item::{Item, ItemRef, PalletItemKind, for_each_item, resolve_name},
+    item::{Item, ItemRef, PalletItemKind, ambiguous_name_message, for_each_item},
+    lookup::resolve_name,
 };
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -77,7 +78,8 @@ pub fn pallet_items(
     let pallet = resolve_name(
         &request.pallet,
         metadata.pallets().map(|pallet| pallet.name()),
-    )?
+    )
+    .map_err(|ambiguous| anyhow!(ambiguous_name_message(&ambiguous)))?
     .with_context(|| {
         format!(
             "no pallet named `{}`; `list_pallets` lists the valid names",

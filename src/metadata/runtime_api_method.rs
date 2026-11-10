@@ -1,12 +1,13 @@
 //! Reading one method of a runtime API.
 
-use anyhow::{Context, bail};
+use anyhow::anyhow;
 use rmcp::schemars::{self, JsonSchema};
 use serde::{Deserialize, Serialize};
 
 use super::{
     LoadedMetadata,
-    item::{docs, resolve_name, split_qualified_name},
+    item::{ambiguous_name_message, docs},
+    lookup::{self, QualifiedName, RuntimeApiLookupError, RuntimeApiMethodLookupError},
     registry::{Field, type_name},
 };
 
@@ -58,34 +59,17 @@ pub fn runtime_api_method(
     loaded: &LoadedMetadata,
     address: &RuntimeApiMethodAddress,
 ) -> anyhow::Result<RuntimeApiMethodDetails> {
-    let metadata = &loaded.metadata;
+    let (runtime_api, method) =
+        lookup::runtime_api_method(&loaded.metadata, &address.runtime_api, &address.name).map_err(
+            |error| {
+                anyhow!(runtime_api_method_lookup_error_message(
+                    &error,
+                    loaded.version
+                ))
+            },
+        )?;
 
-    // The listings hand back `namespace` and `name` separately, so a qualified name is
-    // already split somewhere: hand the split back rather than accept a second spelling.
-    if let Some((qualifier, method)) = split_qualified_name(&address.name) {
-        bail!(
-            "`name` is the method's own name: pass `{qualifier}` as `runtime_api` and `{method}` as `name`"
-        );
-    }
-
-    let runtime_api = resolve_runtime_api_name(loaded, &address.runtime_api)?;
-    let api = metadata
-        .runtime_api_trait_by_name(runtime_api)
-        .expect("resolve_runtime_api_name selected this runtime API");
-
-    let method_name = resolve_name(&address.name, api.methods().map(|method| method.name()))?
-        .with_context(|| {
-            format!(
-                "no method named `{}` in runtime API `{runtime_api}`; `list_runtime_api_methods` lists them",
-                address.name
-            )
-        })?;
-
-    let method = api
-        .method_by_name(method_name)
-        .expect("resolve_name selected this method");
-
-    let types = metadata.types();
+    let types = loaded.metadata.types();
 
     let arguments = method
         .inputs()
@@ -95,7 +79,7 @@ pub fn runtime_api_method(
     let returns = type_name(method.output_ty(), types);
 
     Ok(RuntimeApiMethodDetails {
-        runtime_api: String::from(api.name()),
+        runtime_api: String::from(runtime_api.name()),
         name: String::from(method.name()),
         docs: docs(method.docs()),
         arguments,
@@ -103,25 +87,54 @@ pub fn runtime_api_method(
     })
 }
 
-fn resolve_runtime_api_name<'a>(loaded: &'a LoadedMetadata, name: &str) -> anyhow::Result<&'a str> {
-    let metadata = &loaded.metadata;
+fn runtime_api_method_lookup_error_message(
+    error: &RuntimeApiMethodLookupError,
+    version: u32,
+) -> String {
+    match error {
+        RuntimeApiMethodLookupError::QualifiedName(QualifiedName { qualifier, name }) => format!(
+            "`name` is the method's own name: pass `{qualifier}` as `runtime_api` and `{name}` as `name`"
+        ),
+        RuntimeApiMethodLookupError::AmbiguousName(ambiguous) => ambiguous_name_message(ambiguous),
+        RuntimeApiMethodLookupError::RuntimeApi(error) => {
+            runtime_api_lookup_error_message(error, version)
+        }
+        RuntimeApiMethodLookupError::UnknownMethod { runtime_api, name } => format!(
+            "no method named `{name}` in runtime API `{runtime_api}`; `list_runtime_api_methods` lists them"
+        ),
+    }
+}
 
-    if let Some(runtime_api) =
-        resolve_name(name, metadata.runtime_api_traits().map(|api| api.name()))?
-    {
-        return Ok(runtime_api);
+fn runtime_api_lookup_error_message(error: &RuntimeApiLookupError, version: u32) -> String {
+    // Metadata before v15 carries no runtime APIs at all, so whatever else the name missed,
+    // that is why it was not found.
+    if version < 15 {
+        return format!("runtime APIs need metadata v15; this metadata is v{version}");
     }
 
-    if metadata.runtime_api_traits().len() == 0 && loaded.version < 15 {
-        bail!(
-            "runtime APIs need metadata v15; this metadata is v{}",
-            loaded.version
+    match error {
+        RuntimeApiLookupError::AmbiguousName(ambiguous) => ambiguous_name_message(ambiguous),
+        RuntimeApiLookupError::IsPallet(pallet) => {
+            format!("`{pallet}` is a pallet, not a runtime API; `get_pallet_item` reads its items")
+        }
+        RuntimeApiLookupError::UnknownRuntimeApi(name) => {
+            format!("no runtime API named `{name}`; `list_runtime_apis` lists the valid names")
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn runtime_api_lookup_error_message_blames_the_version_before_v15() {
+        assert_eq!(
+            runtime_api_lookup_error_message(
+                &RuntimeApiLookupError::IsPallet(String::from("Balances")),
+                14
+            ),
+            "runtime APIs need metadata v15; this metadata is v14"
         );
     }
-
-    if let Some(pallet) = resolve_name(name, metadata.pallets().map(|pallet| pallet.name()))? {
-        bail!("`{pallet}` is a pallet, not a runtime API; `get_pallet_item` reads its items");
-    }
-
-    bail!("no runtime API named `{name}`; `list_runtime_apis` lists the valid names");
 }
