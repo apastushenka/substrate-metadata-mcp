@@ -21,19 +21,8 @@ async fn main() -> ExitCode {
 }
 
 async fn run() -> anyhow::Result<()> {
-    let cli = cli::parse();
-    let server = MetadataServer::new(cli.url);
-
-    // Preload metadata
-    tokio::spawn({
-        let server = server.clone();
-
-        async move {
-            if let Err(err) = server.metadata().await {
-                eprintln!("{}: {err:#}", env!("CARGO_PKG_NAME"));
-            }
-        }
-    });
+    let server = MetadataServer::new(cli::parse().source());
+    server.prepare().await?;
 
     let service = server.serve(stdio()).await?;
     service.waiting().await?;

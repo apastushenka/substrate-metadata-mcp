@@ -8,11 +8,10 @@ use rmcp::{
     model::{Implementation, ServerCapabilities, ServerConfig},
     tool, tool_handler, tool_router,
 };
-use subxt_utils_fetchmetadata::Url;
 use tokio::sync::OnceCell;
 
 use crate::{
-    metadata::{self, MetadataSnapshot},
+    metadata::{self, MetadataSnapshot, Source},
     tools::{
         self, PalletItemAddress, PalletItemDetails, PalletItems, PalletItemsRequest, PalletList,
         RuntimeApiList, RuntimeApiMethodAddress, RuntimeApiMethodDetails, RuntimeApiMethods,
@@ -22,39 +21,62 @@ use crate::{
 
 #[derive(Clone)]
 pub struct MetadataServer {
-    url: Url,
+    source: Source,
     metadata: Arc<OnceCell<MetadataSnapshot>>,
 }
 
-// Every tool declares `read_only_hint` true and `open_world_hint` false. The server does
-// reach the network: `metadata` fetches from the node, and retries inside a tool call
-// whenever the startup preload failed. The world stays closed because the endpoint is
-// fixed by `--url` and no tool argument can widen it. A tool that took a URL would have
-// to flip `open_world_hint`.
+// Every tool declares `read_only_hint` true and `open_world_hint` false. With `--url` the
+// server does reach the network: `metadata` fetches from the node, and retries inside a
+// tool call whenever the startup preload failed. The world stays closed because the source
+// is fixed on the command line and no tool argument can widen it. A tool that took a URL
+// would have to flip `open_world_hint`.
 #[tool_router]
 impl MetadataServer {
-    pub fn new(url: Url) -> Self {
+    pub fn new(source: Source) -> Self {
         Self {
-            url,
+            source,
             metadata: Arc::new(OnceCell::new()),
         }
     }
 
-    /// The metadata, fetched on first use.
+    /// The metadata, loaded on first use.
     pub async fn metadata(&self) -> anyhow::Result<&MetadataSnapshot> {
         self.metadata
             .get_or_try_init(|| async {
-                let snapshot = metadata::load(&self.url).await?;
+                let snapshot = metadata::load(&self.source).await?;
 
                 eprintln!(
                     "{}: loaded metadata from {}",
                     env!("CARGO_PKG_NAME"),
-                    self.url
+                    self.source
                 );
 
                 anyhow::Ok(snapshot)
             })
             .await
+    }
+
+    /// Prepares the server to serve. An error means it cannot work and must not start.
+    /// Preparing means loading the metadata: a file loads here, since a broken one will not
+    /// mend itself, and a node is fetched in the background, since it may come up later and
+    /// tool calls retry.
+    pub async fn prepare(&self) -> anyhow::Result<()> {
+        match self.source {
+            Source::File(_) => {
+                self.metadata().await?;
+            }
+            Source::Url(_) => {
+                let server = self.clone();
+
+                tokio::spawn(async move {
+                    if let Err(err) = server.metadata().await {
+                        eprintln!("{}: {err:#}", env!("CARGO_PKG_NAME"));
+                    }
+                });
+            }
+        }
+
+        Ok(())
     }
 
     /// Identify the runtime this server indexes: its spec name, its spec and transaction
@@ -224,19 +246,23 @@ impl ServerHandler for MetadataServer {
     fn get_info(&self) -> ServerConfig {
         let capabilities = ServerCapabilities::builder().enable_tools().build();
 
+        let origin = match &self.source {
+            Source::Url(url) => format!("at {url}"),
+            Source::File(path) => format!("in {}", path.display()),
+        };
+
         ServerConfig::new(capabilities)
             .with_server_info(Implementation::new(
                 env!("CARGO_PKG_NAME"),
                 env!("CARGO_PKG_VERSION"),
             ))
             .with_instructions(format!(
-                "Read-only index of the Substrate runtime metadata at {}, \
+                "Read-only index of the Substrate runtime metadata {origin}, \
                  a snapshot loaded once and never refreshed. Covers pallets \
                  with their calls, storage, events, errors, constants and \
                  view functions; runtime APIs with their methods. Not \
                  a chain client: no account state, no blocks, no extrinsic \
-                 submission.",
-                self.url
+                 submission."
             ))
     }
 }
