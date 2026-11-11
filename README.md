@@ -1,9 +1,9 @@
 # substrate-metadata-mcp
 
-Read-only MCP server that indexes a Substrate runtime's metadata. Fetches once
-from a node RPC endpoint, then lists, searches, and reads pallets, storage,
-calls, events, errors, constants, view functions, and runtime APIs — without
-touching chain state.
+Read-only MCP server that indexes a Substrate runtime's metadata. Loads it once,
+from a node RPC endpoint or a file, then lists, searches, and reads pallets,
+storage, calls, events, errors, constants, view functions, and runtime APIs —
+without touching chain state.
 
 Supports metadata v14–v16. v14 has no runtime APIs or view functions; v15 has
 no view functions.
@@ -18,17 +18,30 @@ Building from source needs Rust 1.88 or newer.
 
 ## Usage
 
-The only required argument is the node endpoint (ws, wss, http, or https):
+The one required argument says where the metadata comes from: a node endpoint
+(ws, wss, http, or https) or a file.
 
 ```bash
 substrate-metadata-mcp --url wss://rpc.polkadot.io
+substrate-metadata-mcp --file polkadot.scale
 ```
 
-Metadata is fetched once in the background at startup, and retried on tool use
-if that fetch failed. An unreachable node breaks the tool calls, not the
-server's startup. The fetched metadata and the `--url` endpoint both last for
-the process lifetime: a runtime upgrade on the node is not picked up, and no
-tool argument can change the endpoint.
+The file holds SCALE-encoded metadata, the default output of
+[`subxt metadata`](https://crates.io/crates/subxt-cli). A project that generates
+code with subxt usually keeps one already; otherwise:
+
+```bash
+cargo install subxt-cli
+subxt metadata --url wss://rpc.polkadot.io -o polkadot.scale
+```
+
+A node's metadata is fetched once in the background at startup, and retried on
+tool use if that fetch failed: an unreachable node breaks the tool calls, not
+the server's startup. A file is read once before the server starts, and one
+that cannot be read or decoded stops it with an error. Either way the metadata
+and its source last for the process lifetime: a runtime upgrade on the node or
+a change to the file is not picked up, and no tool argument can change the
+source.
 
 ## Usage with an MCP client
 
@@ -49,8 +62,12 @@ want indexed:
 - Claude Code: `.mcp.json` in the project root
 - Cursor: `.cursor/mcp.json` in the project, or `~/.cursor/mcp.json` globally
 
-Add another entry under `mcpServers` with a different name and `--url` for a
-second chain.
+For a file, the arguments are `["--file", "/absolute/path/to/polkadot.scale"]`:
+clients start the server in different working directories, so a relative path
+may not resolve.
+
+Add another entry under `mcpServers` with a different name and `--url` or
+`--file` for a second chain.
 
 ## Tools
 

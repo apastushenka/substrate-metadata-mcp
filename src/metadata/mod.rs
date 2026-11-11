@@ -7,11 +7,28 @@ pub mod item;
 pub mod lookup;
 pub mod registry;
 
+use std::{fmt, path::PathBuf};
+
 use anyhow::{Context, bail};
 use frame_metadata::{META_RESERVED, RuntimeMetadataPrefixed};
 use parity_scale_codec::Decode;
 use subxt_metadata::{Metadata, SUPPORTED_METADATA_VERSIONS};
 use subxt_utils_fetchmetadata::{MetadataVersion, Url, from_url};
+
+#[derive(Clone)]
+pub enum Source {
+    Url(Url),
+    File(PathBuf),
+}
+
+impl fmt::Display for Source {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Url(url) => write!(f, "{url}"),
+            Self::File(path) => write!(f, "{}", path.display()),
+        }
+    }
+}
 
 /// `Metadata` does not keep the version of the format it was decoded from, so the
 /// snapshot records it alongside.
@@ -20,10 +37,15 @@ pub struct MetadataSnapshot {
     pub version: u32,
 }
 
-pub async fn load(url: &Url) -> anyhow::Result<MetadataSnapshot> {
-    let bytes = fetch(url).await?;
+pub async fn load(source: &Source) -> anyhow::Result<MetadataSnapshot> {
+    let bytes = match source {
+        Source::Url(url) => fetch(url).await?,
+        Source::File(path) => tokio::fs::read(path)
+            .await
+            .with_context(|| format!("failed to read {}", path.display()))?,
+    };
 
-    decode(&bytes)
+    decode(&bytes).with_context(|| format!("failed to load metadata from {source}"))
 }
 
 async fn fetch(url: &Url) -> anyhow::Result<Vec<u8>> {
