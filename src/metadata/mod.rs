@@ -9,7 +9,7 @@ pub mod registry;
 
 use std::{fmt, path::PathBuf};
 
-use anyhow::{Context, bail};
+use anyhow::{Context, anyhow, bail};
 use frame_metadata::{META_RESERVED, RuntimeMetadataPrefixed};
 use parity_scale_codec::Decode;
 use subxt_metadata::{Metadata, SUPPORTED_METADATA_VERSIONS};
@@ -84,6 +84,9 @@ fn decode(bytes: &[u8]) -> anyhow::Result<MetadataSnapshot> {
     // Not `Metadata::decode_from` or `decode_runtime_metadata`: on some inputs they recurse
     // until the stack overflows.
     let prefixed = RuntimeMetadataPrefixed::decode(&mut &*bytes)
+        // `codec::Error` prints its whole chain and also returns it from `source()`, so `{:#}`
+        // would repeat every level. The innermost cause alone says what went wrong.
+        .map_err(|err| anyhow!("{}", anyhow::Error::from(err).root_cause()))
         .with_context(|| format!("failed to decode metadata v{version}"))?;
 
     let metadata = Metadata::try_from(prefixed)
@@ -145,6 +148,19 @@ mod tests {
         assert!(
             message.starts_with("failed to decode metadata v15: "),
             "{message}"
+        );
+    }
+
+    #[test]
+    fn decode_reports_only_innermost_codec_error() {
+        let message = decode_error(&prefixed(&[15, 0xff]));
+        let cause = message
+            .strip_prefix("failed to decode metadata v15: ")
+            .expect("version named");
+
+        assert!(
+            !cause.contains("RuntimeMetadata") && !cause.contains('\n'),
+            "{message:?}"
         );
     }
 }
