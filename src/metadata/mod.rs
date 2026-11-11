@@ -130,7 +130,7 @@ mod tests {
     }
 
     #[test]
-    fn decode_names_an_unsupported_version() {
+    fn decode_names_unsupported_version() {
         for version in [17, 13] {
             let message = decode_error(&prefixed(&[version]));
 
@@ -142,7 +142,7 @@ mod tests {
     }
 
     #[test]
-    fn decode_names_the_version_of_corrupt_metadata() {
+    fn decode_names_version_of_corrupt_metadata() {
         let message = decode_error(&prefixed(&[15, 0xff]));
 
         assert!(
