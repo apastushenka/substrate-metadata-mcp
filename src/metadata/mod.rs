@@ -11,7 +11,7 @@ use std::{fmt, path::PathBuf};
 
 use anyhow::{Context, anyhow, bail};
 use frame_metadata::{META_RESERVED, RuntimeMetadataPrefixed};
-use parity_scale_codec::Decode;
+use parity_scale_codec::DecodeAll;
 use subxt_metadata::{Metadata, SUPPORTED_METADATA_VERSIONS};
 use subxt_utils_fetchmetadata::{MetadataVersion, Url, from_url};
 
@@ -83,7 +83,7 @@ fn decode(bytes: &[u8]) -> anyhow::Result<MetadataSnapshot> {
 
     // Not `Metadata::decode_from` or `decode_runtime_metadata`: on some inputs they recurse
     // until the stack overflows.
-    let prefixed = RuntimeMetadataPrefixed::decode(&mut &*bytes)
+    let prefixed = RuntimeMetadataPrefixed::decode_all(&mut &*bytes)
         // `codec::Error` prints its whole chain and also returns it from `source()`, so `{:#}`
         // would repeat every level. The innermost cause alone says what went wrong.
         .map_err(|err| anyhow!("{}", anyhow::Error::from(err).root_cause()))
@@ -161,6 +161,23 @@ mod tests {
         assert!(
             !cause.contains("RuntimeMetadata") && !cause.contains('\n'),
             "{message:?}"
+        );
+    }
+
+    #[test]
+    fn decode_rejects_trailing_bytes() {
+        let message = decode_error(&prefixed(&[
+            14, // version
+            0,  // types: none
+            0,  // pallets: none
+            0, 4, 0, // extrinsic: type 0, version 4, no extensions
+            0, // runtime type 0
+            0, // one byte too many
+        ]));
+
+        assert_eq!(
+            message,
+            "failed to decode metadata v14: Input buffer has still data left after decoding!"
         );
     }
 }
