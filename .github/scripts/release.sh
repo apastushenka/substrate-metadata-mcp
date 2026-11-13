@@ -67,9 +67,12 @@ prepare() {
     if tag_exists "$tag"; then
         echo "$version is released already as $tag"
     else
-        # The anchors keep a dependency of the same version from matching. With --first-parent,
-        # a merge commit counts as setting what its branch set, e.g. the merge commit of a PR.
-        commit=$(git log -1 --first-parent --format=%H -G "^version = \"${version//./\\.}\"\$" -- Cargo.toml)
+        # -S looks for a change in how many lines match, so a commit that only moves the version
+        # line doesn't count as setting it, as it would with -G. The anchors keep a dependency of
+        # the same version from matching. With --first-parent, a merge commit counts as setting
+        # what its branch set, e.g. the merge commit of a PR.
+        commit=$(git log -1 --first-parent --format=%H --pickaxe-regex \
+            -S "^version = \"${version//./\\.}\"\$" -- Cargo.toml)
         [ -n "$commit" ] || fail "no commit sets version $version in Cargo.toml"
 
         if [ "${GITHUB_EVENT_NAME:-}" = workflow_dispatch ] || [ "$commit" = "$(git rev-parse HEAD)" ]; then
@@ -87,8 +90,9 @@ prepare() {
     set_outputs "should-release=$release" "version=$version" "tag=$tag" "commit=$commit"
 }
 
-# Whether crates.io has the version already: a re-run after a partial success must not publish
-# it again. The sparse index is a static file; the crates.io API would ask for a User-Agent.
+# Whether crates.io has the version already. It takes a version only once, so a re-run after a
+# partial success has to skip publishing to get to the tag. The sparse index is a static file;
+# the crates.io API would ask for a User-Agent.
 published() {
     local version=$1 index
     index=$(curl --fail --silent --show-error "$INDEX")
