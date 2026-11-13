@@ -57,8 +57,9 @@ prepare() {
     tag="v$version"
 
     # crates.io takes any version not published yet, a lower one too, so a typo such as 0.0.1
-    # would go out unless the version is checked against the latest release.
-    latest=$(git ls-remote --tags --refs origin 'v*' | sed 's|.*refs/tags/||' | sort -V | tail -n 1)
+    # would go out unless the version is checked against the latest release. The digit after the v
+    # keeps out other tags on v: sort -V would put them above every release.
+    latest=$(git ls-remote --tags --refs origin 'v[0-9]*' | sed 's|.*refs/tags/||' | sort -V | tail -n 1)
     if [ -n "$latest" ] && [ "$latest" != "$tag" ] &&
         [ "$(printf '%s\n' "$latest" "$tag" | sort -V | tail -n 1)" != "$tag" ]; then
         fail "version $version is below the latest release $latest"
