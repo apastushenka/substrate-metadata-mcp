@@ -8,7 +8,7 @@ repository = "https://github.com/apastushenka/substrate-metadata-mcp"
 license = "MIT OR Apache-2.0"
 keywords = ["substrate", "polkadot", "subxt", "mcp", "metadata"]
 categories = ["command-line-utilities", "development-tools"]
-exclude = ["CLAUDE.md"]
+exclude = ["CLAUDE.md", "/.github"]
 
 [profile.release]
 lto = true

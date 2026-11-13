@@ -1,0 +1,125 @@
+name: Release
+
+# Publishes a new version to crates.io and tags it, once Cargo.toml on main gets a version
+# without a tag. The steps are commands of .github/scripts/release.sh.
+on:
+  push:
+    branches: [main]
+    paths: [Cargo.toml]
+  # By hand on main: retries a release that failed. On any other branch: a dry run.
+  workflow_dispatch:
+  # Every PR into main runs this, so the required release check always reports. On a release
+  # PR, one that sets a version without a tag, the check also says that merging releases it.
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  # Runs on main share one group, so two releases never run at once. A group keeps only one
+  # pending run and replaces it with a newer one, so dry runs get groups of their own, per PR or
+  # branch, and never push a release out; a new push to a PR cancels its dry run.
+  group: ${{ github.ref == 'refs/heads/main' && 'release' || format('release-{0}', github.ref) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  prepare:
+    name: "release check"
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    outputs:
+      should-release: ${{ steps.prepare.outputs.should-release }}
+      version: ${{ steps.prepare.outputs.version }}
+      tag: ${{ steps.prepare.outputs.tag }}
+      commit: ${{ steps.prepare.outputs.commit }}
+
+    steps:
+      # The whole history, to find the commit that set the version.
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - id: prepare
+        run: bash .github/scripts/release.sh prepare
+
+  # CI on the commit that set the version, which is older than main when a failed release is
+  # retried after main moved on. A PR gets CI on its own.
+  verify:
+    needs: prepare
+    if: needs.prepare.outputs.should-release == 'true' && github.event_name != 'pull_request'
+    uses: ./.github/workflows/ci.yml
+    with:
+      ref: ${{ needs.prepare.outputs.commit }}
+
+  publish:
+    name: "publish to crates.io"
+    needs: [prepare, verify]
+    # Only the mainline publishes; dry runs stop before this.
+    if: >-
+      needs.prepare.outputs.should-release == 'true' &&
+      github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 20
+    # Waits for approval. Trusted publishing on crates.io accepts only this environment.
+    environment: crates-io
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      # The script comes from the commit of this run, as the workflow does, so a fix merged into
+      # main reaches a manual retry. The crate comes from the commit that set the version.
+      - uses: actions/checkout@v7
+
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.prepare.outputs.commit }}
+          path: crate
+
+      - id: published
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: bash .github/scripts/release.sh published "$VERSION"
+
+      # A third-party action, so it is pinned to a commit, here and below.
+      - if: steps.published.outputs.published == 'false'
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: stable
+
+      # A token that lives until the end of the job: the action's post step revokes it.
+      - id: auth
+        if: steps.published.outputs.published == 'false'
+        uses: rust-lang/crates-io-auth-action@3268eb413133e2960fa4ae0e963ca76380c54cd9 # v1.0.6
+
+      # No verification build here: build scripts and proc macros of dependencies would run next
+      # to the token and to id-token: write, which lets them get a token of their own. verify
+      # builds the same commit with `cargo publish --dry-run`, without either.
+      - if: steps.published.outputs.published == 'false'
+        working-directory: crate
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+        run: cargo publish --locked --no-verify
+
+  tag:
+    name: "tag"
+    needs: [prepare, publish]
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+
+    steps:
+      # For the script only, from the commit of this run, as in publish. The tag goes on the
+      # commit that set the version.
+      - uses: actions/checkout@v7
+
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+          COMMIT: ${{ needs.prepare.outputs.commit }}
+        run: bash .github/scripts/release.sh tag "$TAG" "$COMMIT"
