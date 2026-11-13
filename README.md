@@ -1,52 +1,55 @@
 # substrate-metadata-mcp
 
-Read-only MCP server that indexes a Substrate runtime's metadata. Loads it once,
-from a node RPC endpoint or a file, then lists, searches, and reads pallets,
-storage, calls, events, errors, constants, view functions, and runtime APIs —
-without touching chain state.
+An MCP server that indexes the metadata of a Substrate runtime. It loads the
+metadata once, from a node or from a file. Its tools list, search and read the
+pallets with their calls, storage, events, errors, constants and view
+functions, and the runtime APIs with their methods. The server is read-only and
+never touches chain state.
 
-Supports metadata v14–v16. v14 has no runtime APIs or view functions; v15 has
-no view functions.
+It supports metadata versions 14 to 16. Version 14 has no runtime APIs or view
+functions, and version 15 has no view functions.
 
 ## Install
 
 ```bash
-cargo install substrate-metadata-mcp
+cargo install --locked substrate-metadata-mcp
 ```
 
-Building from source needs Rust 1.88 or newer.
+This builds the server from source and needs Rust 1.88 or newer.
 
 ## Usage
 
-The one required argument says where the metadata comes from: a node endpoint
-(ws, wss, http, or https) or a file.
+Point the server at a node endpoint (ws, wss, http or https) or at a file.
+Exactly one of the two is required.
 
 ```bash
 substrate-metadata-mcp --url wss://rpc.polkadot.io
 substrate-metadata-mcp --file polkadot.scale
 ```
 
-The file holds SCALE-encoded metadata, the default output of
-[`subxt metadata`](https://crates.io/crates/subxt-cli). A project that generates
-code with subxt usually keeps one already; otherwise:
+The file holds SCALE-encoded metadata, which is what
+[`subxt metadata`](https://crates.io/crates/subxt-cli) writes by default.
+Projects that generate code with subxt usually have such a file already. If
+yours doesn't, create one:
 
 ```bash
-cargo install subxt-cli
+cargo install --locked subxt-cli
 subxt metadata --url wss://rpc.polkadot.io -o polkadot.scale
 ```
 
-A node's metadata is fetched once in the background at startup, and retried on
-tool use if that fetch failed: an unreachable node breaks the tool calls, not
-the server's startup. A file is read once before the server starts, and one
-that cannot be read or decoded stops it with an error. Either way the metadata
-and its source last for the process lifetime: a runtime upgrade on the node or
-a change to the file is not picked up, and no tool argument can change the
-source.
+With `--url`, the server fetches the metadata in the background at startup. If
+the node can't be reached, the server still starts, and each tool call tries
+the fetch again. With `--file`, the server reads the file before it starts, and
+exits with an error if the file can't be read or decoded.
+
+The metadata is loaded only once. A runtime upgrade on the node or a new
+version of the file takes effect after a restart, and no tool can switch the
+server to another node or file.
 
 ## Usage with an MCP client
 
-Add this to the client's MCP configuration, replacing the URL with the chain you
-want indexed:
+Add the server to your client's MCP configuration, with the URL of the chain
+you want to index:
 
 ```json
 {
@@ -59,32 +62,33 @@ want indexed:
 }
 ```
 
-- Claude Code: `.mcp.json` in the project root
-- Cursor: `.cursor/mcp.json` in the project, or `~/.cursor/mcp.json` globally
+Claude Code reads this from `.mcp.json` in the project root. Cursor reads it
+from `.cursor/mcp.json` in the project, or from `~/.cursor/mcp.json` for all
+projects.
 
-For a file, the arguments are `["--file", "/absolute/path/to/polkadot.scale"]`:
-clients start the server in different working directories, so a relative path
-may not resolve.
+To use a file, pass `["--file", "/absolute/path/to/polkadot.scale"]` as the
+arguments. Give an absolute path, because each client starts the server in a
+working directory of its own.
 
-Add another entry under `mcpServers` with a different name and `--url` or
-`--file` for a second chain.
+To index a second chain, add another entry with a different name.
 
 ## Tools
 
-| Tool | Role |
+| Tool | What it does |
 | --- | --- |
-| `get_runtime_info` | Spec name, versions, SS58 prefix, metadata format version |
-| `list_pallets` | Every pallet with index and per-kind item counts |
-| `list_pallet_items` | Paged listing of one pallet's items (optionally by kind) |
-| `get_pallet_item` | Full docs and kind-specific fields for one pallet item |
-| `list_runtime_apis` | Every runtime API (empty under metadata v14) |
+| `get_runtime_info` | Spec name, versions, SS58 prefix and metadata version |
+| `list_pallets` | Every pallet with its index and the number of items of each kind |
+| `list_pallet_items` | The items of one pallet, page by page, optionally filtered by kind |
+| `get_pallet_item` | One pallet item in full, with its docs and the fields of its kind |
+| `list_runtime_apis` | Every runtime API (none under metadata version 14) |
 | `list_runtime_api_methods` | Every method of one runtime API |
-| `get_runtime_api_method` | Full docs and signature for one runtime API method |
-| `search` | Ranked name/docs search across the whole metadata |
+| `get_runtime_api_method` | One runtime API method in full, with its docs and signature |
+| `search` | Names and docs across the whole metadata, best matches first |
 
-Typical flow: `search` (or `list_pallets` → `list_pallet_items`) to locate an
-item, then `get_pallet_item` / `get_runtime_api_method` for the full record.
-Listings are complete, paged if long; `search` ranks and truncates.
+To find an item, use `search`, or browse with `list_pallets` and
+`list_pallet_items`. Then read it in full with `get_pallet_item` or
+`get_runtime_api_method`. The listings show everything, split into pages when
+long, while `search` returns only the best matches.
 
 ## License
 
