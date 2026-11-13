@@ -1,6 +1,6 @@
 [package]
 name = "substrate-metadata-mcp"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 rust-version = "1.88"
 description = "Read-only MCP server that indexes a Substrate runtime's metadata: pallets and runtime APIs. Lists, searches and reads calls, storage, events, errors, constants, view functions and API methods, without touching chain state."
