@@ -50,7 +50,7 @@ tag_exists() {
 # (the release PR's merge, or its dry run) or by a manual one. A later push only gets a warning,
 # so a failed release is finished on purpose, never as a side effect of merging something else.
 prepare() {
-    local version tag latest release=false commit=""
+    local version tag latest pattern release=false commit=""
 
     version=$(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml | head -n 1)
     [ -n "$version" ] || fail "no package version in Cargo.toml"
@@ -71,9 +71,12 @@ prepare() {
         # -S looks for a change in how many lines match, so a commit that only moves the version
         # line doesn't count as setting it, as it would with -G. The anchors keep a dependency of
         # the same version from matching. With --first-parent, a merge commit counts as setting
-        # what its branch set, e.g. the merge commit of a PR.
+        # what its branch set, e.g. the merge commit of a PR. Of the characters a version may
+        # hold, only the dot and the plus of build metadata mean something in a regex.
+        pattern=${version//./\\.}
+        pattern=${pattern//+/\\+}
         commit=$(git log -1 --first-parent --format=%H --pickaxe-regex \
-            -S "^version = \"${version//./\\.}\"\$" -- Cargo.toml)
+            -S "^version = \"$pattern\"\$" -- Cargo.toml)
         [ -n "$commit" ] || fail "no commit sets version $version in Cargo.toml"
 
         if [ "${GITHUB_EVENT_NAME:-}" = workflow_dispatch ] || [ "$commit" = "$(git rev-parse HEAD)" ]; then
