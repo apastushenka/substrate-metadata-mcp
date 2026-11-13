@@ -6,6 +6,14 @@ on:
   # A PR green on a stale base can still break main, so the merge result is checked too.
   push:
     branches: [main]
+  # The release workflow runs these checks on the commit it publishes, which is older than main
+  # when a failed release is retried after main moved on.
+  workflow_call:
+    inputs:
+      ref:
+        description: Commit to check; empty means the commit of the event.
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -21,6 +29,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
 
       # Unstable rustfmt options in rustfmt.toml; stable ignores them silently.
       # A third-party action, so it is pinned to a commit, here and below.
@@ -38,6 +48,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
 
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
         with:
@@ -51,7 +63,8 @@ jobs:
       - run: cargo test --locked
 
       # Not publishing: this builds the crate the way crates.io will, so broken
-      # metadata and files missing from the package fail here, not at release.
+      # metadata and files missing from the package fail here. It is the only
+      # such build before a release: release.yml publishes with --no-verify.
       # It reuses the dependencies the steps above compiled.
       - run: cargo publish --dry-run --locked
 
@@ -62,6 +75,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
 
       # Pinned to rust-version in Cargo.toml; the two move together or the claim rots.
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
