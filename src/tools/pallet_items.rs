@@ -101,7 +101,7 @@ pub fn pallet_items(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::metadata::item::ItemKind;
+    use crate::metadata::item::{Args, ItemKind};
 
     fn request(pallet: &str, kinds: &[PalletItemKind]) -> PalletItemsRequest {
         PalletItemsRequest {
@@ -118,6 +118,7 @@ mod tests {
             namespace,
             name,
             docs: &[],
+            args: Args::None,
         }
     }
 

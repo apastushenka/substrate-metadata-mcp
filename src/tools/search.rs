@@ -1,7 +1,8 @@
-//! Finding items in the metadata by name and documentation.
+//! Finding items in the metadata by name, argument names and documentation.
 //!
 //! Both sides are cut into words by the same splitter, and the two sides are named apart
-//! throughout: a query yields *terms*, an item's name, namespace and docs yield *tokens*.
+//! throughout: a query yields *terms*, an item's name, namespace, argument names and docs yield
+//! *tokens*.
 //! A term matches a token when they are equal ignoring ASCII case. Names are
 //! ASCII identifiers, so they are unaffected; documentation in other scripts
 //! compares as written.
@@ -18,21 +19,24 @@ use crate::metadata::{
     item::{Item, ItemKind, ItemRef, for_each_item},
 };
 
-/// `name`: at least one query word hit the item's own name. `docs`: none did; the
-/// words were found in its documentation.
+/// `name`: at least one query word hit the item's own name. `argument`: none did, but one hit
+/// the name of an argument the item takes. `docs`: neither; the words were found in its
+/// documentation.
 #[derive(Debug, Clone, Copy, Serialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum MatchedIn {
     Name,
+    Argument,
     Docs,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct SearchRequest {
-    /// Words to look for; an item matches only if it matches every one. Matching is by
-    /// whole word, not by fragment: names are split on underscores and case boundaries,
-    /// so `transfer_allow_death` is found by `transfer`, by `death`, or by both, but
+    /// Words to look for in an item's name, its documentation and, for a call, a view function or
+    /// a runtime API method, the names of its arguments; an item matches only if it matches every
+    /// one. Matching is by whole word, not by fragment: names are split on underscores and case
+    /// boundaries, so `transfer_allow_death` is found by `transfer`, by `death`, or by both, but
     /// not by `trans`. The query is split the same way, so `TransferAllowDeath` and
     /// `transfer_allow_death` work as queries. No stemming: `balance` and `balances`
     /// are different words; use the form the metadata uses, or try both. A word may also
@@ -165,7 +169,7 @@ impl<'a> Scanner<'a> {
     }
 
     fn scan(&mut self, item: &ItemRef<'_>) -> TermHits {
-        let (mut name, mut docs, mut namespace) = (0u64, 0u64, 0u64);
+        let (mut name, mut args, mut docs, mut namespace) = (0u64, 0u64, 0u64, 0u64);
 
         let mut coverage = NameCoverage::default();
 
@@ -176,6 +180,12 @@ impl<'a> Scanner<'a> {
             coverage.record(matching != 0);
         }
 
+        item.args.for_each_name(|arg| {
+            for token in tokenize(arg) {
+                args |= self.matching_terms(token);
+            }
+        });
+
         for token in item.docs.iter().flat_map(|doc| tokenize(doc)) {
             docs |= self.matching_terms(token);
         }
@@ -184,11 +194,12 @@ impl<'a> Scanner<'a> {
             namespace |= self.matching_terms(token);
         }
 
-        self.seen |= name | docs | namespace;
+        self.seen |= name | args | docs | namespace;
 
         TermHits {
             count: self.terms.len(),
             name,
+            args,
             docs,
             namespace,
             coverage,
@@ -237,6 +248,7 @@ struct TermHits {
     /// How many terms the query had -- how far `rank` reads the masks below.
     count: usize,
     name: u64,
+    args: u64,
     docs: u64,
     namespace: u64,
     coverage: NameCoverage,
@@ -247,18 +259,22 @@ impl TermHits {
     fn rank(&self) -> Option<Rank> {
         let mut score = 0;
         let mut by_name = false;
+        let mut by_args = false;
         let mut by_docs = false;
 
-        // Name, then namespace, then docs: first hit wins, not a ranking of weights.
-        // Name and namespace both score 2. Namespace before docs so a named pallet
-        // outranks a docs-only mention. Namespace sets no flag: a pallet must not
-        // select its own children.
+        // Name, then namespace, then arguments, then docs: first hit wins, not a ranking of
+        // weights. Name and namespace both score 2, arguments and docs 1. Namespace before docs
+        // so a named pallet outranks a docs-only mention. Namespace sets no flag: a pallet must
+        // not select its own children.
         for i in 0..self.count {
             if has_term(self.name, i) {
                 score += 2;
                 by_name = true;
             } else if has_term(self.namespace, i) {
                 score += 2;
+            } else if has_term(self.args, i) {
+                score += 1;
+                by_args = true;
             } else if has_term(self.docs, i) {
                 score += 1;
                 by_docs = true;
@@ -267,11 +283,15 @@ impl TermHits {
             }
         }
 
-        // So a query naming only a container finds the container itself and nothing under it.
-        let matched_in = match (by_name, by_docs) {
-            (true, _) => MatchedIn::Name,
-            (false, true) => MatchedIn::Docs,
-            (false, false) => return None,
+        let matched_in = if by_name {
+            MatchedIn::Name
+        } else if by_args {
+            MatchedIn::Argument
+        } else if by_docs {
+            MatchedIn::Docs
+        } else {
+            // So a query naming only a container finds the container itself and nothing under it.
+            return None;
         };
 
         Some(Rank {
@@ -402,7 +422,10 @@ mod tokens {
 
 #[cfg(test)]
 mod tests {
+    use scale_info::form::PortableForm;
+
     use super::*;
+    use crate::metadata::item::Args;
 
     fn rank(name: &str, namespace: Option<&str>, docs: &[&str], query: &str) -> Option<Rank> {
         let docs: Vec<String> = docs.iter().copied().map(String::from).collect();
@@ -412,11 +435,21 @@ mod tests {
             namespace,
             name,
             docs: &docs,
+            args: Args::None,
         };
 
         let mut scanner = Scanner::from_query(query).unwrap();
 
         scanner.scan(&item).rank()
+    }
+
+    fn call_args(names: &[&str]) -> Vec<scale_info::Field<PortableForm>> {
+        names
+            .iter()
+            .map(|name| {
+                scale_info::Field::new(Some(String::from(*name)), 0u32.into(), None, Vec::new())
+            })
+            .collect()
     }
 
     #[test]
@@ -481,12 +514,52 @@ mod tests {
             namespace: None,
             name: "Balances",
             docs: &docs,
+            args: Args::None,
         };
         let mut scanner = Scanner::from_query("balances").unwrap();
 
         let hit = scanner.scan(&item).rank();
 
         assert_eq!(hit.unwrap().score, 2);
+    }
+
+    #[test]
+    fn matching_finds_terms_in_argument_names() {
+        let args = call_args(&["dest", "value"]);
+        let item = ItemRef {
+            kind: ItemKind::Call,
+            namespace: Some("Balances"),
+            name: "transfer_allow_death",
+            docs: &[],
+            args: Args::Call(&args),
+        };
+        let mut scanner = Scanner::from_query("dest value").unwrap();
+
+        let hit = scanner.scan(&item).rank();
+
+        assert!(matches!(hit.unwrap().matched_in, MatchedIn::Argument));
+    }
+
+    #[test]
+    fn matched_in_prefers_name_then_argument_then_docs() {
+        let args = call_args(&["dest"]);
+        let docs = [String::from("Transfer funds.")];
+        let item = ItemRef {
+            kind: ItemKind::Call,
+            namespace: Some("Balances"),
+            name: "transfer_all",
+            docs: &docs,
+            args: Args::Call(&args),
+        };
+        let matched_in = |query: &str| {
+            let mut scanner = Scanner::from_query(query).unwrap();
+
+            scanner.scan(&item).rank().unwrap().matched_in
+        };
+
+        assert!(matches!(matched_in("transfer dest funds"), MatchedIn::Name));
+        assert!(matches!(matched_in("dest funds"), MatchedIn::Argument));
+        assert!(matches!(matched_in("funds"), MatchedIn::Docs));
     }
 
     #[test]
@@ -515,6 +588,7 @@ mod tests {
             namespace: Some("Balances"),
             name: "transfer_all",
             docs: &docs,
+            args: Args::None,
         };
         let mut scanner = Scanner::from_query("transfer nonsense").unwrap();
 

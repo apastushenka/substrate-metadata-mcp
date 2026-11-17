@@ -212,8 +212,8 @@ impl MetadataServer {
             .map_err(tool_error)
     }
 
-    /// Find any item of the metadata whose name or documentation matches a query. The
-    /// runtime's metadata is far too large to read whole, and this is how to locate
+    /// Find any item of the metadata whose name, documentation or argument names match a query.
+    /// The runtime's metadata is far too large to read whole, and this is how to locate
     /// something in it. A hit names an item and gives the first line of its documentation,
     /// not its contents.
     ///

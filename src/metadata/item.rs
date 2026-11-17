@@ -4,8 +4,9 @@
 //! `namespace`, `name` -- so that a model can hand it on to another tool unchanged.
 
 use rmcp::schemars::{self, JsonSchema};
+use scale_info::form::PortableForm;
 use serde::{Deserialize, Serialize};
-use subxt_metadata::Metadata;
+use subxt_metadata::{Metadata, RuntimeApiMethodMetadata, ViewFunctionMetadata};
 
 use super::docs;
 
@@ -121,6 +122,30 @@ pub struct ItemRef<'a> {
     pub namespace: Option<&'a str>,
     pub name: &'a str,
     pub docs: &'a [String],
+    pub args: Args<'a>,
+}
+
+/// The arguments an item takes, left where the metadata keeps them: the listings share the walk
+/// and never read them, so nothing is copied out.
+pub enum Args<'a> {
+    None,
+    Call(&'a [scale_info::Field<PortableForm>]),
+    ViewFunction(&'a ViewFunctionMetadata<'a>),
+    RuntimeApiMethod(&'a RuntimeApiMethodMetadata<'a>),
+}
+
+impl Args<'_> {
+    pub fn for_each_name(&self, mut visit: impl FnMut(&str)) {
+        match self {
+            Self::None => {}
+            Self::Call(fields) => fields
+                .iter()
+                .filter_map(|field| field.name.as_deref())
+                .for_each(visit),
+            Self::ViewFunction(function) => function.inputs().for_each(|input| visit(&input.name)),
+            Self::RuntimeApiMethod(method) => method.inputs().for_each(|input| visit(&input.name)),
+        }
+    }
 }
 
 /// Adding an `ItemKind` means adding a loop here. A kind the metadata version predates
@@ -141,6 +166,7 @@ pub fn for_each_item(metadata: &Metadata, mut visit: impl FnMut(ItemRef<'_>)) {
             namespace: None,
             name: namespace,
             docs: pallet.docs(),
+            args: Args::None,
         });
 
         for variant in pallet.call_variants().unwrap_or_default() {
@@ -149,6 +175,7 @@ pub fn for_each_item(metadata: &Metadata, mut visit: impl FnMut(ItemRef<'_>)) {
                 namespace: Some(namespace),
                 name: &variant.name,
                 docs: &variant.docs,
+                args: Args::Call(&variant.fields),
             });
         }
 
@@ -158,6 +185,7 @@ pub fn for_each_item(metadata: &Metadata, mut visit: impl FnMut(ItemRef<'_>)) {
                 namespace: Some(namespace),
                 name: view_function.name(),
                 docs: view_function.docs(),
+                args: Args::ViewFunction(&view_function),
             });
         }
 
@@ -169,6 +197,7 @@ pub fn for_each_item(metadata: &Metadata, mut visit: impl FnMut(ItemRef<'_>)) {
                 namespace: Some(namespace),
                 name: entry.name(),
                 docs: entry.docs(),
+                args: Args::None,
             });
         }
 
@@ -178,6 +207,7 @@ pub fn for_each_item(metadata: &Metadata, mut visit: impl FnMut(ItemRef<'_>)) {
                 namespace: Some(namespace),
                 name: constant.name(),
                 docs: constant.docs(),
+                args: Args::None,
             });
         }
 
@@ -187,6 +217,7 @@ pub fn for_each_item(metadata: &Metadata, mut visit: impl FnMut(ItemRef<'_>)) {
                 namespace: Some(namespace),
                 name: &variant.name,
                 docs: &variant.docs,
+                args: Args::None,
             });
         }
 
@@ -196,6 +227,7 @@ pub fn for_each_item(metadata: &Metadata, mut visit: impl FnMut(ItemRef<'_>)) {
                 namespace: Some(namespace),
                 name: &variant.name,
                 docs: &variant.docs,
+                args: Args::None,
             });
         }
     }
@@ -208,6 +240,7 @@ pub fn for_each_item(metadata: &Metadata, mut visit: impl FnMut(ItemRef<'_>)) {
             namespace: None,
             name: namespace,
             docs: api.docs(),
+            args: Args::None,
         });
 
         for method in api.methods() {
@@ -216,6 +249,7 @@ pub fn for_each_item(metadata: &Metadata, mut visit: impl FnMut(ItemRef<'_>)) {
                 namespace: Some(namespace),
                 name: method.name(),
                 docs: method.docs(),
+                args: Args::RuntimeApiMethod(&method),
             });
         }
     }
