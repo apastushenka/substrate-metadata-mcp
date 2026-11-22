@@ -7,12 +7,16 @@
 //! several times over, and a test inside src/ would ship without them and fail there.
 
 use rmcp::{
+    RoleClient,
     model::{CallToolRequestParams, ClientConfig, object},
     serde_json::{Value, json},
     serve_client,
+    service::RunningService,
     transport::TokioChildProcess,
 };
 use tokio::process::Command;
+
+type Client = RunningService<RoleClient, ClientConfig>;
 
 /// How far down the hits a target may sit.
 const TOP: usize = 5;
@@ -60,6 +64,35 @@ async fn real_queries_on_asset_hub_find_targets_in_top_five() {
         "polkadot-asset-hub.scale",
         &[
             Case {
+                query: "Staking BondingDuration SessionsPerEra",
+                kinds: &["constant"],
+                targets: &[
+                    &["constant Staking::BondingDuration"],
+                    &["constant Staking::SessionsPerEra"],
+                ],
+            },
+            Case {
+                query: "ErasStakers ErasValidatorPrefs exposure commission",
+                kinds: &[],
+                targets: &[
+                    &[
+                        "storage Staking::ErasStakersOverview",
+                        "storage Staking::ErasStakersPaged",
+                    ],
+                    &["storage Staking::ErasValidatorPrefs"],
+                ],
+            },
+            Case {
+                query: "Rewarded payout DOT staking",
+                kinds: &[],
+                targets: &[&["event Staking::Rewarded", "call Staking::payout_stakers"]],
+            },
+            Case {
+                query: "swap_exact_tokens_for_tokens keep_alive",
+                kinds: &[],
+                targets: &[&["call AssetConversion::swap_exact_tokens_for_tokens"]],
+            },
+            Case {
                 query: "swap",
                 kinds: &["call"],
                 targets: &[&["call AssetConversion::swap_exact_tokens_for_tokens"]],
@@ -102,32 +135,39 @@ async fn real_queries_on_asset_hub_find_targets_in_top_five() {
     .await;
 }
 
-async fn assert_targets_found(fixture: &str, cases: &[Case]) {
-    let mut command = Command::new(env!("CARGO_BIN_EXE_substrate-metadata-mcp"));
-    command.arg("--file").arg(format!(
-        "{}/tests/fixtures/{fixture}",
-        env!("CARGO_MANIFEST_DIR")
-    ));
+// A hit need not have every word of the query, and `missing` names the words it lacks.
+#[tokio::test]
+async fn partial_hits_list_missing_words() {
+    let client = connect("polkadot.scale").await;
+    let content = search(&client, "transfer allow death", &["call"]).await;
 
-    let transport = TokioChildProcess::new(command).expect("server starts");
-    let client = serve_client(ClientConfig::default(), transport)
-        .await
-        .expect("server initializes");
+    client.cancel().await.expect("server stops");
+
+    let missing_of = |target: &str| {
+        content["hits"]
+            .as_array()
+            .expect("search returns hits")
+            .iter()
+            .find(|hit| address(hit) == target)
+            .map(|hit| hit["missing"].clone())
+    };
+
+    assert_eq!(
+        missing_of("call Balances::transfer_allow_death"),
+        Some(json!([]))
+    );
+    assert_eq!(
+        missing_of("call OnDemand::place_order_allow_death"),
+        Some(json!(["transfer"]))
+    );
+}
+
+async fn assert_targets_found(fixture: &str, cases: &[Case]) {
+    let client = connect(fixture).await;
     let mut misses = Vec::new();
 
     for case in cases {
-        let arguments = json!({ "query": case.query, "kinds": case.kinds, "limit": TOP });
-        let params = CallToolRequestParams::new("search").with_arguments(object(arguments));
-        let result = client.call_tool(params).await.expect("search answers");
-
-        assert!(
-            result.is_error != Some(true),
-            "search {:?} failed: {}",
-            case.query,
-            json!(result.content)
-        );
-
-        let content = result.structured_content.expect("search returns JSON");
+        let content = search(&client, case.query, case.kinds).await;
         let hits: Vec<String> = content["hits"]
             .as_array()
             .expect("search returns hits")
@@ -149,6 +189,35 @@ async fn assert_targets_found(fixture: &str, cases: &[Case]) {
         "targets missing from the first {TOP} hits:\n{}",
         misses.join("\n")
     );
+}
+
+async fn connect(fixture: &str) -> Client {
+    let mut command = Command::new(env!("CARGO_BIN_EXE_substrate-metadata-mcp"));
+    command.arg("--file").arg(format!(
+        "{}/tests/fixtures/{fixture}",
+        env!("CARGO_MANIFEST_DIR")
+    ));
+
+    let transport = TokioChildProcess::new(command).expect("server starts");
+
+    serve_client(ClientConfig::default(), transport)
+        .await
+        .expect("server initializes")
+}
+
+/// The first `TOP` hits, as the JSON a client gets.
+async fn search(client: &Client, query: &str, kinds: &[&str]) -> Value {
+    let arguments = json!({ "query": query, "kinds": kinds, "limit": TOP });
+    let params = CallToolRequestParams::new("search").with_arguments(object(arguments));
+    let result = client.call_tool(params).await.expect("search answers");
+
+    assert!(
+        result.is_error != Some(true),
+        "search {query:?} failed: {}",
+        json!(result.content)
+    );
+
+    result.structured_content.expect("search returns JSON")
 }
 
 fn address(hit: &Value) -> String {

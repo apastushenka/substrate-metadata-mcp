@@ -114,6 +114,11 @@ impl Item {
             summary: docs::summary(item.docs),
         }
     }
+
+    /// The address, `kind`, `namespace` and `name`, as one value that compares by kind first.
+    pub fn address(&self) -> (ItemKind, Option<&str>, &str) {
+        (self.kind, self.namespace.as_deref(), &self.name)
+    }
 }
 
 /// An item as the walk sees it: borrowed from the metadata, docs in full.
