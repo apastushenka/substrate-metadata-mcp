@@ -1,22 +1,10 @@
 //! Search on real metadata, through the server binary, the way a client talks to it.
-//!
-//! The fixtures are the metadata of Polkadot and of Polkadot Asset Hub, both at spec 2005003.
-//! They stay as they are, so that a runtime upgrade cannot move these tests.
-//!
-//! The package leaves tests/ out (`exclude` in Cargo.toml): the fixtures outweigh the crate
-//! several times over, and a test inside src/ would ship without them and fail there.
 
-use rmcp::{
-    RoleClient,
-    model::{CallToolRequestParams, ClientConfig, object},
-    serde_json::{Value, json},
-    serve_client,
-    service::RunningService,
-    transport::TokioChildProcess,
-};
-use tokio::process::Command;
+use rmcp::serde_json::{Value, json};
 
-type Client = RunningService<RoleClient, ClientConfig>;
+mod common;
+
+use self::common::{Client, call, connect};
 
 /// How far down the hits a target may sit.
 const TOP: usize = 5;
@@ -191,33 +179,11 @@ async fn assert_targets_found(fixture: &str, cases: &[Case]) {
     );
 }
 
-async fn connect(fixture: &str) -> Client {
-    let mut command = Command::new(env!("CARGO_BIN_EXE_substrate-metadata-mcp"));
-    command.arg("--file").arg(format!(
-        "{}/tests/fixtures/{fixture}",
-        env!("CARGO_MANIFEST_DIR")
-    ));
-
-    let transport = TokioChildProcess::new(command).expect("server starts");
-
-    serve_client(ClientConfig::default(), transport)
-        .await
-        .expect("server initializes")
-}
-
 /// The first `TOP` hits, as the JSON a client gets.
 async fn search(client: &Client, query: &str, kinds: &[&str]) -> Value {
     let arguments = json!({ "query": query, "kinds": kinds, "limit": TOP });
-    let params = CallToolRequestParams::new("search").with_arguments(object(arguments));
-    let result = client.call_tool(params).await.expect("search answers");
 
-    assert!(
-        result.is_error != Some(true),
-        "search {query:?} failed: {}",
-        json!(result.content)
-    );
-
-    result.structured_content.expect("search returns JSON")
+    call(client, "search", arguments).await
 }
 
 fn address(hit: &Value) -> String {
