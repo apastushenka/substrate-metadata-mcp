@@ -523,6 +523,26 @@ mod tests {
     }
 
     #[test]
+    fn idf_counts_items_outside_kinds() {
+        let results = run_kinds(
+            "zap transfer",
+            &[ItemKind::Call],
+            &[
+                call("Balances", "zap"),
+                call("Balances", "zap_transfer"),
+                TestItem::new(ItemKind::Event, Some("Balances"), "Transfer"),
+                TestItem::new(ItemKind::Event, Some("Assets"), "Transfer"),
+                TestItem::new(ItemKind::Event, Some("Nfts"), "Transfer"),
+            ],
+            5,
+        );
+
+        // Three of the four items with `transfer` are events: were N to count the calls alone,
+        // `transfer` would be on more items than N, and its IDF would turn negative.
+        assert_eq!(names(&results), ["zap_transfer", "zap"]);
+    }
+
+    #[test]
     fn rare_term_outweighs_common_term() {
         let results = run(
             "add zap",
