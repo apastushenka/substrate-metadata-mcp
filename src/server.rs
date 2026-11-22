@@ -195,11 +195,17 @@ impl MetadataServer {
     /// `default` is expected rather than an error. A call has no return type in the
     /// metadata, so no tool reports one.
     ///
-    /// A constant's `value` and a storage entry's `default` are scale-value text, not
-    /// JSON: `None ()` is the absent variant, a single parenthesised number is a one-field
-    /// wrapper rather than a number, and a byte array such as an `AccountId32` is a list
-    /// of decimal numbers, not hex. The exception is a `u256` or an `i256`, which has no
-    /// text form and is returned as hex.
+    /// A constant's `value` and a storage entry's `default` are JSON, decoded by the item's
+    /// type. A struct is an object of its fields in declaration order; a tuple, a sequence
+    /// or an array is an array, and a map is an array of `[key, value]` pairs. A type that
+    /// wraps one unnamed field, such as `Perbill`, `AccountId32` or `BoundedVec`, is that
+    /// field's value, so nothing names the type of a nested field: only the top-level one
+    /// is in `type` or `value_type`. An enum value is the variant's name when it has no
+    /// fields (`"None"`) and otherwise an object whose one key is that name (`{"Some": 5}`).
+    /// Integers up to 32 bits are numbers; wider ones, `u64`, `u128` and `U256` among them,
+    /// are decimal strings, which no parser rounds. Bytes, `Vec<u8>` or `[u8; N]`, are a
+    /// hex string (`0x...`), even when they spell text. A bit sequence is an array of
+    /// booleans.
     #[tool(annotations(read_only_hint = true, open_world_hint = false))]
     async fn get_pallet_item(
         &self,

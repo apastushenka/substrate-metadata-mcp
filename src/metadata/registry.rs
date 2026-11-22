@@ -1,7 +1,4 @@
-//! Reading the type registry: a type id as a name, a registry field as a `Field`,
-//! SCALE bytes as a value string.
-
-use core::fmt::Write;
+//! Reading the type registry: a type id as a name, and a registry field as a `Field`.
 
 use frame_decode::{runtime_apis::RuntimeApiInput, view_functions::ViewFunctionInput};
 use rmcp::schemars::{self, JsonSchema};
@@ -64,41 +61,6 @@ impl Field {
             docs: docs::full(&field.docs),
         }
     }
-}
-
-/// Decode SCALE bytes as `ty` and render them in scale-value's syntax, falling back to
-/// hex when the decoded value has no text form: scale-value's `Display` returns an error
-/// for `u256` and `i256`, which its decoder does produce. `None` only when the bytes are
-/// not exactly one value of that type -- leftover bytes mean the type was wrong, not that
-/// a value was read.
-pub fn render_value(bytes: &[u8], ty: u32, types: &PortableRegistry) -> Option<String> {
-    let mut cursor = bytes;
-    let value = scale_value::scale::decode_as_type(&mut cursor, ty, types).ok()?;
-
-    if !cursor.is_empty() {
-        return None;
-    }
-
-    let mut rendered = String::new();
-
-    // `write!` and not `to_string()`: the latter unwraps the `Display` error into a panic
-    match write!(rendered, "{value}") {
-        Ok(()) => Some(rendered),
-        // The cursor emptied, so these bytes are the value itself, not a prefix of it.
-        Err(_) => Some(hex(bytes)),
-    }
-}
-
-fn hex(bytes: &[u8]) -> String {
-    let mut out = String::with_capacity(2 + bytes.len() * 2);
-
-    out.push_str("0x");
-
-    for byte in bytes {
-        write!(out, "{byte:02x}").expect("writing to a String cannot fail");
-    }
-
-    out
 }
 
 /// Walks parameters and sequence/array/tuple/compact elements, never the fields
@@ -222,8 +184,7 @@ mod tests {
 
     use frame_decode::{runtime_apis::RuntimeApiInput, view_functions::ViewFunctionInput};
     use scale_info::{
-        MetaType, Path, PortableRegistry, PortableType, Registry, Type, TypeInfo,
-        form::PortableForm, scale::Compact,
+        MetaType, PortableRegistry, Registry, TypeInfo, form::PortableForm, scale::Compact,
     };
 
     use super::*;
@@ -353,63 +314,5 @@ mod tests {
                 docs: vec![String::from("Whether it succeeded.")],
             }
         );
-    }
-
-    #[test]
-    fn render_value_of_u32() {
-        let (types, id) = registry_and_id::<u32>();
-
-        assert_eq!(
-            render_value(&42u32.to_le_bytes(), id, &types).as_deref(),
-            Some("42")
-        );
-    }
-
-    #[test]
-    fn render_value_rejects_leftover_bytes() {
-        let (types, id) = registry_and_id::<u32>();
-        let mut bytes = 42u32.to_le_bytes().to_vec();
-        bytes.push(0);
-
-        assert_eq!(render_value(&bytes, id, &types), None);
-    }
-
-    // scale-value decodes `u256`/`i256` but its `Display` refuses to render them, and
-    // `to_string()` turns that refusal into a panic. No Rust type in a v14+ registry maps
-    // to these primitives -- `primitive_types::U256` is a composite over `[u64; 4]` -- but
-    // the metadata format can carry them, and a panicking handler leaves a request unanswered.
-    #[test]
-    fn render_value_falls_back_to_hex_for_unrenderable_primitives() {
-        for primitive in [TypeDefPrimitive::U256, TypeDefPrimitive::I256] {
-            let ty = Type {
-                path: Path::default(),
-                type_params: Vec::new(),
-                type_def: TypeDef::Primitive(primitive.clone()),
-                docs: Vec::new(),
-            };
-            let types = PortableRegistry {
-                types: vec![PortableType { id: 0, ty }],
-            };
-
-            let bytes = [7u8; 32];
-            let mut cursor = &bytes[..];
-
-            assert!(
-                scale_value::scale::decode_as_type(&mut cursor, 0, &types).is_ok(),
-                "{primitive:?}: decoding is what makes the rendering reachable"
-            );
-            assert_eq!(
-                render_value(&bytes, 0, &types).as_deref(),
-                Some("0x0707070707070707070707070707070707070707070707070707070707070707"),
-                "{primitive:?}"
-            );
-        }
-    }
-
-    #[test]
-    fn render_value_is_none_when_decode_fails() {
-        let (types, id) = registry_and_id::<u32>();
-
-        assert_eq!(render_value(&[], id, &types), None);
     }
 }

@@ -2024,6 +2024,7 @@ dependencies = [
  "clap",
  "frame-decode",
  "frame-metadata",
+ "hex",
  "parity-scale-codec",
  "rmcp",
  "scale-decode",
