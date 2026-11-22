@@ -83,7 +83,7 @@ To index a second chain, add another entry with a different name.
 | `list_runtime_apis` | Every runtime API (none under metadata version 14) |
 | `list_runtime_api_methods` | Every method of one runtime API |
 | `get_runtime_api_method` | One runtime API method in full, with its docs and signature |
-| `search` | Names and docs across the whole metadata, best matches first |
+| `search` | Names, arguments and docs across the whole metadata, best matches first |
 
 To find an item, use `search`, or browse with `list_pallets` and
 `list_pallet_items`. Then read it in full with `get_pallet_item` or

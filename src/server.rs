@@ -212,8 +212,8 @@ impl MetadataServer {
             .map_err(tool_error)
     }
 
-    /// Find any item of the metadata whose name or documentation matches a query. The
-    /// runtime's metadata is far too large to read whole, and this is how to locate
+    /// Find any item of the metadata whose name, documentation or argument names match a query.
+    /// The runtime's metadata is far too large to read whole, and this is how to locate
     /// something in it. A hit names an item and gives the first line of its documentation,
     /// not its contents.
     ///
@@ -221,13 +221,15 @@ impl MetadataServer {
     /// that item directly; to see everything one pallet holds, list it. Both are complete,
     /// while this is ranked and truncated.
     ///
-    /// There is no paging: hits beyond `limit` cannot be retrieved. `total` counts every
-    /// match, so a `total` larger than the number of hits means the result is incomplete;
-    /// narrow the query rather than repeat it.
+    /// Hits come best first, and a hit need not have every word of the query: its `missing`
+    /// lists the words it lacks, and is empty when it has them all. Nothing says how many more
+    /// match beyond `limit`, and there is no paging: if what you look for is not among the hits,
+    /// add a word to the query or raise `limit`.
     ///
-    /// Every word of the query must match for an item to be returned, so `unmatched`
-    /// explains an empty result. A hit whose `matched_in` is `docs` matched only the
-    /// documentation: check it rather than trust it.
+    /// `unmatched` lists the words found nowhere in the metadata. An empty result with an empty
+    /// `unmatched` means the words are only on items outside `kinds`, or only in the name of the
+    /// pallet or runtime API that holds an item. A hit whose `matched_in` is `docs` was found by
+    /// its documentation alone: check it rather than trust it.
     #[tool(annotations(read_only_hint = true, open_world_hint = false))]
     async fn search(
         &self,
