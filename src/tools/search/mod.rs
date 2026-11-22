@@ -35,8 +35,8 @@ pub struct SearchRequest {
     /// `transfer_allow_death` is found by `transfer`, by `death`, or by both, but not by `trans`.
     /// The query is split the same way, so `TransferAllowDeath` and `transfer_allow_death` work as
     /// queries. No stemming: `balance` and `balances` are different words; use the form the
-    /// metadata uses, or try both. The name of a pallet or runtime API alone finds the pallet or
-    /// runtime API itself, not its contents.
+    /// metadata uses, or try both. The name of a pallet or runtime API finds the pallet or runtime
+    /// API itself, and its contents only where they have the word too.
     pub query: String,
 
     /// Restrict the search to these kinds of item. Empty means all of them.
