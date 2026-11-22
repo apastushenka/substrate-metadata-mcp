@@ -501,4 +501,26 @@ mod tests {
             });
         });
     }
+
+    // Without serde_json's `preserve_order`, every object rmcp builds, schemas and responses
+    // alike, comes out with its keys sorted: this address would read `kind`, `name`, `pallet`.
+    #[test]
+    fn properties_keep_declaration_order() {
+        let tool = MetadataServer::tool_router()
+            .list_all()
+            .into_iter()
+            .find(|tool| tool.name == "get_pallet_item")
+            .expect("get_pallet_item is a tool");
+
+        let properties: Vec<&str> = tool
+            .input_schema
+            .get("properties")
+            .and_then(Value::as_object)
+            .expect("get_pallet_item takes arguments")
+            .keys()
+            .map(String::as_str)
+            .collect();
+
+        assert_eq!(properties, ["pallet", "kind", "name"]);
+    }
 }
