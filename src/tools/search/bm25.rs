@@ -190,10 +190,11 @@ struct Terms<'a> {
 
 impl<'a> Terms<'a> {
     fn new(query: &'a str) -> anyhow::Result<Self> {
-        let query_words: Vec<&str> = tokenize(query).collect();
+        // One word past the cap is enough to refuse the query, so a longer one is neither read
+        // through nor merged.
+        let query_words: Vec<&str> = tokenize(query).take(TermSet::CAPACITY + 1).collect();
 
         ensure!(!query_words.is_empty(), "query must not be empty");
-        // Before repeats merge, which keeps the merging below bounded.
         ensure!(
             query_words.len() <= TermSet::CAPACITY,
             "query must not have more than {} words",
