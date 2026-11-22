@@ -21,6 +21,7 @@ clap = { version = "4.6.6", features = ["derive"] }
 rmcp = { version = "3.4.0", features = ["server", "transport-io", "schemars"] }
 scale-value = { version = "0.18.2", default-features = false }
 serde = { version = "1.0.229", features = ["derive"] }
+serde_json = { version = "1.0.154", features = ["preserve_order"] }
 subxt-metadata = { version = "0.50.3" }
 subxt-utils-fetchmetadata = { version = "0.50.3", features = ["url"] }
 thiserror = { version = "2.0.20" }
