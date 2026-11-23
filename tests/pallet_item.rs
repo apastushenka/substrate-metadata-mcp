@@ -149,19 +149,39 @@ async fn read_every_value(fixture: &str) -> usize {
                         "should be absent"
                     }
                 );
+                assert!(
+                    !answer.get(field).is_some_and(has_null),
+                    "{pallet}::{name}: `{field}` holds a null"
+                );
 
                 values += usize::from(present);
             }
 
             offset += items.len();
 
-            if items.is_empty() || listing["total"] == json!(offset) {
+            if listing["total"] == json!(offset) {
                 break;
             }
+
+            assert!(
+                !items.is_empty(),
+                "{pallet}: the listing stops at {offset} of {}",
+                listing["total"]
+            );
         }
     }
 
     client.cancel().await.expect("server stops");
 
     values
+}
+
+/// Whether `null` appears anywhere in `value`, at any depth: a decoded value never holds one.
+fn has_null(value: &Value) -> bool {
+    match value {
+        Value::Null => true,
+        Value::Array(items) => items.iter().any(has_null),
+        Value::Object(fields) => fields.values().any(has_null),
+        _ => false,
+    }
 }
