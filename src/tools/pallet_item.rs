@@ -1,7 +1,10 @@
 //! Reading one item of a pallet.
 
 use anyhow::Context;
-use rmcp::schemars::{self, JsonSchema};
+use rmcp::{
+    schemars::{self, JsonSchema},
+    serde_json::Value,
+};
 use scale_info::{PortableRegistry, Variant, form::PortableForm};
 use serde::{Deserialize, Serialize};
 use subxt_metadata::{
@@ -12,7 +15,8 @@ use crate::metadata::{
     MetadataSnapshot, docs,
     item::PalletItemKind,
     lookup::{self, PalletItem},
-    registry::{Field, render_value, type_name},
+    registry::{Field, type_name},
+    value,
 };
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -102,16 +106,12 @@ pub enum PalletItemShape {
         /// (`false`). Stated rather than left to be inferred from `default`, which is
         /// absent exactly when this is `true`.
         optional: bool,
-        /// The value a missing key falls back to. Absent only when the entry is
-        /// optional, which has no fallback; an entry that is not optional always has
-        /// one, so this is never dropped silently. Rendered by scale-value's `Display`,
-        /// not as JSON: everything unnamed is a parenthesised list, so `()` is an empty
-        /// sequence and not a unit, `(x)` a one-field wrapper, and a byte array reads as
-        /// decimal numbers; variants read `Some ({ ... })` and `None ()`. Hex (`0x...`)
-        /// instead for a `u256` or an `i256`, which have no text form.
+        /// The value a missing key falls back to, as JSON, decoded as the type that
+        /// `value_type` names; the tool's description gives the mapping. Absent only when the
+        /// entry is optional, which has no fallback; an entry that is not optional always has
+        /// one, so this is never dropped silently.
         #[serde(skip_serializing_if = "Option::is_none")]
-        #[schemars(extend("type" = "string"))]
-        default: Option<String>,
+        default: Option<Value>,
     },
     /// A pallet constant: its type and its SCALE-decoded value.
     Constant {
@@ -119,13 +119,9 @@ pub enum PalletItemShape {
         /// `type`.
         #[serde(rename = "type")]
         ty: String,
-        /// The constant's value, decoded from SCALE and rendered by scale-value's
-        /// `Display`, not as JSON: everything unnamed is a parenthesised list, so `()`
-        /// is an empty sequence and not a unit, `(x)` a one-field wrapper, and a byte
-        /// array reads as decimal numbers; variants read `Some ({ ... })` and
-        /// `None ()`. Hex (`0x...`) instead for a `u256` or an `i256`, which have no
-        /// text form.
-        value: String,
+        /// The constant's value, as JSON, decoded as the type that `type` names; the tool's
+        /// description gives the mapping.
+        value: Value,
     },
     /// A pallet event: the two SCALE indices that identify it, and its fields, which may
     /// be unnamed.
@@ -276,7 +272,7 @@ fn storage_details(
     let default = entry
         .default_value()
         .map(|bytes| {
-            render_value(bytes, entry.value_ty(), types).with_context(|| {
+            value::decode(bytes, entry.value_ty(), types).with_context(|| {
                 format!(
                     "cannot decode the default of storage entry `{}` in pallet `{}` as `{value_type}`",
                     entry.name(),
@@ -306,7 +302,7 @@ fn constant_details(
 ) -> anyhow::Result<PalletItemDetails> {
     let ty = type_name(constant.ty(), types);
 
-    let value = render_value(constant.value(), constant.ty(), types).with_context(|| {
+    let value = value::decode(constant.value(), constant.ty(), types).with_context(|| {
         format!(
             "cannot decode the value of constant `{}` in pallet `{}` as `{ty}`",
             constant.name(),

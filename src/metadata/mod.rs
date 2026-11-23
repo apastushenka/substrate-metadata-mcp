@@ -6,6 +6,7 @@ pub mod docs;
 pub mod item;
 pub mod lookup;
 pub mod registry;
+pub mod value;
 
 use std::{fmt, path::PathBuf};
 
