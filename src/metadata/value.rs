@@ -105,6 +105,10 @@ impl Repr {
         field: &scale_info::Field<PortableForm>,
         types: &PortableRegistry,
     ) -> bool {
+        // scale-info has no big integers: such a type reaches the registry as a newtype over
+        // limbs, and only its path and width tell it apart from any other.
+        const BIG_UINTS: [(&str, u32); 3] = [("U128", 2), ("U256", 4), ("U512", 8)];
+
         let [module, name] = path.segments.as_slice() else {
             return false;
         };
@@ -114,7 +118,7 @@ impl Repr {
         };
 
         module == "primitive_types"
-            && name.starts_with('U')
+            && BIG_UINTS.contains(&(name.as_str(), limbs.len))
             && Self::is_primitive(limbs.type_param.id, TypeDefPrimitive::U64, types)
     }
 
@@ -362,7 +366,8 @@ mod tests {
         }
     }
 
-    // The same limbs in another crate, and under a name that is not `U*`: both plain newtypes.
+    // The same limbs in another crate, under another name, and under the name of another width:
+    // all plain newtypes.
     #[derive(Encode)]
     struct OtherCrateU256([u64; 4]);
 
@@ -382,6 +387,17 @@ mod tests {
 
         fn type_info() -> Type {
             limbs_type("X256", "primitive_types")
+        }
+    }
+
+    #[derive(Encode)]
+    struct WideU128([u64; 4]);
+
+    impl TypeInfo for WideU128 {
+        type Identity = Self;
+
+        fn type_info() -> Type {
+            limbs_type("U128", "primitive_types")
         }
     }
 
@@ -505,6 +521,7 @@ mod tests {
 
         assert_eq!(json_of(&OtherCrateU256([1, 0, 0, 0])), limbs);
         assert_eq!(json_of(&X256([1, 0, 0, 0])), limbs);
+        assert_eq!(json_of(&WideU128([1, 0, 0, 0])), limbs);
     }
 
     #[test]
